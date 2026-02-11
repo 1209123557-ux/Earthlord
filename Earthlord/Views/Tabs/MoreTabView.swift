@@ -9,11 +9,21 @@ import SwiftUI
 
 struct MoreTabView: View {
     var body: some View {
-        PlaceholderView(
-            icon: "ellipsis",
-            title: "更多",
-            subtitle: "更多功能模块"
-        )
+        NavigationView {
+            List {
+                Section(header: Text("开发工具")) {
+                    NavigationLink(destination: SupabaseTestView()) {
+                        HStack {
+                            Image(systemName: "externaldrive.badge.checkmark")
+                                .foregroundColor(.blue)
+                                .frame(width: 30)
+                            Text("Supabase 连接测试")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("更多")
+        }
     }
 }
 
