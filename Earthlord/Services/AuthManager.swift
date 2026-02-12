@@ -289,6 +289,44 @@ class AuthManager: ObservableObject {
         isLoading = false
     }
 
+    /// 删除账户：调用 delete-account 边缘函数
+    func deleteAccount() async {
+        print("[删除账户] 开始删除账户流程")
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            // 获取当前会话的 access token
+            let session = try await supabase.auth.session
+            let accessToken = session.accessToken
+            print("[删除账户] 已获取用户 access token")
+
+            // 调用 delete-account 边缘函数
+            // SDK 不会自动带 Authorization，需要手动传入
+            print("[删除账户] 正在调用 delete-account 边缘函数...")
+            try await supabase.functions.invoke(
+                "delete-account",
+                options: .init(
+                    headers: ["Authorization": "Bearer \(accessToken)"]
+                )
+            )
+
+            print("[删除账户] 服务端删除成功，正在清除本地会话...")
+            // 清除本地 session，触发 auth 状态监听 → 回到登录页
+            try? await supabase.auth.signOut()
+            resetState()
+        } catch FunctionsError.httpError(let code, let data) {
+            let body = String(data: data, encoding: .utf8) ?? "无法解析"
+            print("[删除账户] 边缘函数返回错误，状态码: \(code)，响应: \(body)")
+            errorMessage = "删除账户失败，请稍后重试"
+        } catch {
+            print("[删除账户] 发生错误: \(error.localizedDescription)")
+            errorMessage = "删除账户失败：\(error.localizedDescription)"
+        }
+
+        isLoading = false
+    }
+
     /// 检查现有会话，用于应用启动时恢复登录状态
     func checkSession() async {
         isLoading = true
