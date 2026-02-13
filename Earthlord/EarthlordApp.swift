@@ -9,9 +9,12 @@ import SwiftUI
 
 @main
 struct EarthlordApp: App {
+    @StateObject private var languageManager = LanguageManager.shared
+
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environment(\.locale, languageManager.currentLocale)
         }
     }
 }

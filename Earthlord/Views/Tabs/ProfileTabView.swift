@@ -15,6 +15,9 @@ struct ProfileTabView: View {
     /// 是否显示退出确认弹窗
     @State private var showLogoutAlert = false
 
+    /// 语言管理器
+    @ObservedObject private var languageManager = LanguageManager.shared
+
     /// 是否显示删除账户确认弹窗
     @State private var showDeleteAlert = false
     /// 删除确认输入文字
@@ -127,7 +130,7 @@ struct ProfileTabView: View {
         )
     }
 
-    private func statItem(icon: String, value: String, label: String) -> some View {
+    private func statItem(icon: String, value: String, label: LocalizedStringKey) -> some View {
         VStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 18))
@@ -152,7 +155,9 @@ struct ProfileTabView: View {
 
     private var menuSection: some View {
         VStack(spacing: 0) {
-            menuRow(icon: "gearshape.fill", title: "设置", color: ApocalypseTheme.textSecondary)
+            NavigationLink(destination: LanguageSettingsView()) {
+                menuRow(icon: "gearshape.fill", title: "设置", color: ApocalypseTheme.textSecondary)
+            }
             Divider().background(Color.white.opacity(0.06))
             menuRow(icon: "bell.fill", title: "通知", color: ApocalypseTheme.primary)
             Divider().background(Color.white.opacity(0.06))
@@ -168,7 +173,7 @@ struct ProfileTabView: View {
         )
     }
 
-    private func menuRow(icon: String, title: String, color: Color) -> some View {
+    private func menuRow(icon: String, title: LocalizedStringKey, color: Color) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .foregroundColor(color)
@@ -277,7 +282,7 @@ struct ProfileTabView: View {
                         showDeleteAlert = false
                         let text = deleteConfirmText
                         deleteConfirmText = ""
-                        if text == "删除" {
+                        if text == "删除" || text.uppercased() == "DELETE" {
                             Task { await authManager.deleteAccount() }
                         }
                     } label: {
@@ -287,7 +292,7 @@ struct ProfileTabView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(ApocalypseTheme.danger)
-                    .disabled(deleteConfirmText != "删除")
+                    .disabled(deleteConfirmText != "删除" && deleteConfirmText.uppercased() != "DELETE")
                 }
             }
             .padding(24)
@@ -311,19 +316,19 @@ struct ProfileTabView: View {
     private var displayName: String {
         // 优先取邮箱 @ 前面的部分作为用户名
         guard let email = authManager.currentUser?.email else {
-            return "未知用户"
+            return String(localized: "未知用户")
         }
-        return String(email.split(separator: "@").first ?? "未知用户")
+        return String(email.split(separator: "@").first ?? Substring(String(localized: "未知用户")))
     }
 
     /// 用户邮箱
     private var userEmail: String {
-        authManager.currentUser?.email ?? "未绑定邮箱"
+        authManager.currentUser?.email ?? String(localized: "未绑定邮箱")
     }
 
     /// 用户ID（截取前8位 + ...）
     private var userId: String {
-        let id = authManager.currentUser?.id.uuidString ?? "未知"
+        let id = authManager.currentUser?.id.uuidString ?? String(localized: "未知")
         if id.count > 8 {
             return String(id.prefix(8)) + "..."
         }
