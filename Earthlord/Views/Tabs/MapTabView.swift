@@ -33,16 +33,21 @@ struct MapTabView: View {
                 permissionRequestView
             }
 
-            // 右下角定位按钮（仅在已授权时显示）
+            // 右下角按钮组（仅在已授权时显示）
             if locationManager.isAuthorized {
                 VStack {
                     Spacer()
-                    HStack {
+                    HStack(spacing: 12) {
                         Spacer()
+
+                        // 圈地按钮
+                        claimTerritoryButton
+
+                        // 定位按钮
                         recenterButton
-                            .padding(.trailing, 20)
-                            .padding(.bottom, 40)
                     }
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 40)
                 }
             }
         }
@@ -61,7 +66,10 @@ struct MapTabView: View {
     private var mapView: some View {
         MapViewRepresentable(
             userLocation: $locationManager.userLocation,
-            hasLocatedUser: $hasLocatedUser
+            hasLocatedUser: $hasLocatedUser,
+            trackingPath: $locationManager.pathCoordinates,
+            pathUpdateVersion: locationManager.pathUpdateVersion,
+            isTracking: locationManager.isTracking
         )
         .ignoresSafeArea()
     }
@@ -152,6 +160,41 @@ struct MapTabView: View {
                     .foregroundColor(ApocalypseTheme.danger)
                     .padding(.top, 8)
             }
+        }
+    }
+
+    // MARK: - Claim Territory Button
+    /// 圈地按钮
+    private var claimTerritoryButton: some View {
+        Button(action: {
+            if locationManager.isTracking {
+                // 停止追踪
+                locationManager.stopPathTracking()
+            } else {
+                // 开始追踪
+                locationManager.startPathTracking()
+            }
+        }) {
+            HStack(spacing: 8) {
+                Image(systemName: locationManager.isTracking ? "stop.fill" : "flag.fill")
+                    .font(.system(size: 16))
+
+                Text(locationManager.isTracking ? "停止圈地" : "开始圈地")
+                    .font(.system(size: 14, weight: .semibold))
+
+                // 显示当前点数（追踪时）
+                if locationManager.isTracking && !locationManager.pathCoordinates.isEmpty {
+                    Text("(\(locationManager.pathCoordinates.count))")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.8))
+                }
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(locationManager.isTracking ? ApocalypseTheme.danger : ApocalypseTheme.primary)
+            .cornerRadius(25)
+            .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
         }
     }
 
