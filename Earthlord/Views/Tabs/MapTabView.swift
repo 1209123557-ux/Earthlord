@@ -64,14 +64,27 @@ struct MapTabView: View {
     // MARK: - Map View
     /// 地图视图
     private var mapView: some View {
-        MapViewRepresentable(
-            userLocation: $locationManager.userLocation,
-            hasLocatedUser: $hasLocatedUser,
-            trackingPath: $locationManager.pathCoordinates,
-            pathUpdateVersion: locationManager.pathUpdateVersion,
-            isTracking: locationManager.isTracking
-        )
-        .ignoresSafeArea()
+        ZStack {
+            MapViewRepresentable(
+                userLocation: $locationManager.userLocation,
+                hasLocatedUser: $hasLocatedUser,
+                trackingPath: $locationManager.pathCoordinates,
+                pathUpdateVersion: locationManager.pathUpdateVersion,
+                isTracking: locationManager.isTracking,
+                isPathClosed: locationManager.isPathClosed
+            )
+            .ignoresSafeArea()
+
+            // 速度警告横幅
+            if let warning = locationManager.speedWarning {
+                VStack {
+                    speedWarningBanner(warning: warning)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 60)
+                    Spacer()
+                }
+            }
+        }
     }
 
     // MARK: - Permission Request View
@@ -212,6 +225,33 @@ struct MapTabView: View {
                 .background(ApocalypseTheme.primary)
                 .cornerRadius(25)
                 .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+        }
+    }
+
+    // MARK: - Speed Warning Banner
+    /// 速度警告横幅
+    private func speedWarningBanner(warning: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 20))
+                .foregroundColor(.white)
+
+            Text(warning)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.white)
+                .lineLimit(2)
+
+            Spacer()
+        }
+        .padding()
+        .background(locationManager.isTracking ? ApocalypseTheme.warning : ApocalypseTheme.danger)
+        .cornerRadius(12)
+        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+        .onAppear {
+            // 3 秒后自动隐藏警告
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                locationManager.speedWarning = nil
+            }
         }
     }
 }

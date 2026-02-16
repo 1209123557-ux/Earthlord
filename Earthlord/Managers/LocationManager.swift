@@ -31,8 +31,14 @@ class LocationManager: NSObject, ObservableObject {
     /// 路径更新版本号（触发 SwiftUI 更新）
     @Published var pathUpdateVersion: Int = 0
 
-    /// 路径是否闭合（Day16 会用到）
+    /// 路径是否闭合
     @Published var isPathClosed: Bool = false
+
+    /// 速度警告信息
+    @Published var speedWarning: String?
+
+    /// 是否超速
+    @Published var isOverSpeed: Bool = false
 
     // MARK: - Private Properties
     private let locationManager = CLLocationManager()
@@ -42,6 +48,19 @@ class LocationManager: NSObject, ObservableObject {
 
     /// 路径采点定时器
     private var pathUpdateTimer: Timer?
+
+    /// 上次位置的时间戳（用于速度检测）
+    private var lastLocationTimestamp: Date?
+
+    // MARK: - Constants
+    /// 闭环距离阈值（米）
+    private let closureDistanceThreshold: Double = 30.0
+
+    /// 最少路径点数
+    private let minimumPathPoints: Int = 10
+
+    /// 记录新点的最小距离（米）
+    private let minimumDistanceForNewPoint: Double = 10.0
 
     // MARK: - Computed Properties
     /// 是否已授权定位
@@ -127,26 +146,116 @@ class LocationManager: NSObject, ObservableObject {
     }
 
     /// 记录路径点（定时器回调）
+    /// ⚠️ 关键：先检查距离，再检查速度！顺序不能反！
     private func recordPathPoint() {
-        guard let location = currentLocation else { return }
+        guard isTracking, let location = currentLocation else { return }
 
         // 如果是第一个点，直接添加
         if pathCoordinates.isEmpty {
             pathCoordinates.append(location.coordinate)
             pathUpdateVersion += 1
+            lastLocationTimestamp = location.timestamp
             return
         }
 
-        // 检查距离上个点是否超过 10 米
+        // 步骤1：先检查距离（过滤 GPS 漂移，距离不够就直接返回）
         guard let lastCoordinate = pathCoordinates.last else { return }
         let lastLocation = CLLocation(latitude: lastCoordinate.latitude, longitude: lastCoordinate.longitude)
         let distance = location.distance(from: lastLocation)
 
-        // 距离超过 10 米才记录新点
-        if distance > 10 {
-            pathCoordinates.append(location.coordinate)
-            pathUpdateVersion += 1
+        guard distance > minimumDistanceForNewPoint else {
+            return  // 距离不够，不进行速度检测，直接返回
         }
+
+        // 步骤2：再检查速度（只对真实移动进行检测）
+        guard validateMovementSpeed(newLocation: location) else {
+            return  // 严重超速，不记录
+        }
+
+        // 步骤3：记录新点
+        pathCoordinates.append(location.coordinate)
+        pathUpdateVersion += 1
+        lastLocationTimestamp = location.timestamp
+
+        // 步骤4：检测闭环
+        checkPathClosure()
+    }
+
+    /// 检测路径是否闭环
+    private func checkPathClosure() {
+        // 检查点数是否足够
+        guard pathCoordinates.count >= minimumPathPoints else {
+            print("闭环检测：点数不足（当前 \(pathCoordinates.count)，需要 \(minimumPathPoints)）")
+            return
+        }
+
+        // 检查是否已经闭合
+        guard !isPathClosed else { return }
+
+        // 获取起点和终点
+        guard let startCoordinate = pathCoordinates.first,
+              let endCoordinate = pathCoordinates.last else { return }
+
+        // 计算距离
+        let startLocation = CLLocation(latitude: startCoordinate.latitude, longitude: startCoordinate.longitude)
+        let endLocation = CLLocation(latitude: endCoordinate.latitude, longitude: endCoordinate.longitude)
+        let distance = endLocation.distance(from: startLocation)
+
+        // 判断是否闭环
+        if distance <= closureDistanceThreshold {
+            isPathClosed = true
+            print("✅ 闭环检测成功：距离起点 \(String(format: "%.1f", distance)) 米")
+        } else {
+            print("闭环检测：距离起点 \(String(format: "%.1f", distance)) 米（需要 ≤ \(closureDistanceThreshold) 米）")
+        }
+    }
+
+    /// 验证移动速度
+    /// - Parameter newLocation: 新位置
+    /// - Returns: true=可以记录该点，false=不记录
+    private func validateMovementSpeed(newLocation: CLLocation) -> Bool {
+        // 如果没有上次的时间戳，说明是第二个点，直接通过
+        guard let lastTimestamp = lastLocationTimestamp,
+              let lastCoordinate = pathCoordinates.last else {
+            return true
+        }
+
+        // 计算时间差（秒）
+        let timeInterval = newLocation.timestamp.timeIntervalSince(lastTimestamp)
+        guard timeInterval > 0 else { return true }
+
+        // 计算距离（米）
+        let lastLocation = CLLocation(latitude: lastCoordinate.latitude, longitude: lastCoordinate.longitude)
+        let distance = newLocation.distance(from: lastLocation)
+
+        // 计算速度（km/h）
+        let speedKmh = (distance / timeInterval) * 3.6
+
+        // 清除旧的警告
+        if speedKmh <= 15 {
+            speedWarning = nil
+            isOverSpeed = false
+        }
+
+        // 速度检测
+        if speedKmh > 30 {
+            // 严重超速：停止追踪
+            speedWarning = "移动速度过快（\(String(format: "%.1f", speedKmh)) km/h），已停止圈地"
+            isOverSpeed = true
+            stopPathTracking()
+            print("❌ 速度检测：\(String(format: "%.1f", speedKmh)) km/h，超过 30 km/h，停止追踪")
+            return false
+        } else if speedKmh > 15 {
+            // 轻微超速：警告但继续记录
+            speedWarning = "移动速度过快（\(String(format: "%.1f", speedKmh)) km/h），请放慢速度"
+            isOverSpeed = true
+            print("⚠️ 速度检测：\(String(format: "%.1f", speedKmh)) km/h，超过 15 km/h，发出警告")
+            return true
+        }
+
+        // 正常速度
+        print("✅ 速度检测：\(String(format: "%.1f", speedKmh)) km/h，正常")
+        return true
     }
 }
 
