@@ -161,3 +161,14 @@ struct MapViewRepresentable: UIViewRepresentable {
         }
     }
 }
+
+// MARK: - Preview
+#Preview {
+    MapViewRepresentable(
+        userLocation: .constant(nil),
+        hasLocatedUser: .constant(false),
+        trackingPath: .constant([]),
+        pathUpdateVersion: 0,
+        isTracking: false
+    )
+}
