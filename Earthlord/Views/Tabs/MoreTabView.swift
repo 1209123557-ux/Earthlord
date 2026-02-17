@@ -20,4 +20,5 @@ struct MoreTabView: View {
 
 #Preview {
     MoreTabView()
+        .environmentObject(LocationManager())
 }

@@ -41,5 +41,6 @@ struct TestMenuView: View {
 #Preview {
     NavigationView {
         TestMenuView()
+            .environmentObject(LocationManager())
     }
 }
