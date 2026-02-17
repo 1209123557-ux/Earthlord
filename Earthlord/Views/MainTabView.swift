@@ -9,6 +9,8 @@ import SwiftUI
 
 struct MainTabView: View {
     @State private var selectedTab = 0
+    // ⭐ 提升到 MainTabView 层级，所有 Tab 共享同一个实例
+    @StateObject private var locationManager = LocationManager()
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -41,6 +43,8 @@ struct MainTabView: View {
                 .tag(3)
         }
         .tint(ApocalypseTheme.primary)
+        // 注入到所有子视图
+        .environmentObject(locationManager)
     }
 }
 

@@ -10,7 +10,8 @@ import MapKit
 
 struct MapTabView: View {
     // MARK: - State Objects
-    @StateObject private var locationManager = LocationManager()
+    // ⭐ 从 MainTabView 的 environmentObject 获取共享实例
+    @EnvironmentObject private var locationManager: LocationManager
 
     // MARK: - State Properties
     @State private var hasLocatedUser = false  // 是否已完成首次定位

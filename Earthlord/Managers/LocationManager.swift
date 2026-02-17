@@ -124,6 +124,11 @@ class LocationManager: NSObject, ObservableObject {
         isTracking = true
         pathCoordinates.removeAll()
         pathUpdateVersion = 0
+        isPathClosed = false
+        speedWarning = nil
+        isOverSpeed = false
+
+        TerritoryLogger.shared.log("开始圈地追踪", type: .info)
 
         // 启动 2 秒定时器，定期采点
         pathUpdateTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
@@ -136,6 +141,8 @@ class LocationManager: NSObject, ObservableObject {
         isTracking = false
         pathUpdateTimer?.invalidate()
         pathUpdateTimer = nil
+
+        TerritoryLogger.shared.log("停止追踪，共 \(pathCoordinates.count) 个点", type: .info)
     }
 
     /// 清除路径
@@ -177,20 +184,24 @@ class LocationManager: NSObject, ObservableObject {
         pathUpdateVersion += 1
         lastLocationTimestamp = location.timestamp
 
+        let count = pathCoordinates.count
+        let distanceStr = String(format: "%.1f", distance)
+        TerritoryLogger.shared.log("记录第 \(count) 个点，距上点 \(distanceStr)m", type: .info)
+
         // 步骤4：检测闭环
         checkPathClosure()
     }
 
     /// 检测路径是否闭环
     private func checkPathClosure() {
+        // ⚠️ 已闭环则不再重复检测
+        guard !isPathClosed else { return }
+
         // 检查点数是否足够
         guard pathCoordinates.count >= minimumPathPoints else {
             print("闭环检测：点数不足（当前 \(pathCoordinates.count)，需要 \(minimumPathPoints)）")
             return
         }
-
-        // 检查是否已经闭合
-        guard !isPathClosed else { return }
 
         // 获取起点和终点
         guard let startCoordinate = pathCoordinates.first,
@@ -200,13 +211,16 @@ class LocationManager: NSObject, ObservableObject {
         let startLocation = CLLocation(latitude: startCoordinate.latitude, longitude: startCoordinate.longitude)
         let endLocation = CLLocation(latitude: endCoordinate.latitude, longitude: endCoordinate.longitude)
         let distance = endLocation.distance(from: startLocation)
+        let distanceStr = String(format: "%.1f", distance)
 
         // 判断是否闭环
         if distance <= closureDistanceThreshold {
             isPathClosed = true
-            print("✅ 闭环检测成功：距离起点 \(String(format: "%.1f", distance)) 米")
+            print("✅ 闭环检测成功：距离起点 \(distanceStr) 米")
+            TerritoryLogger.shared.log("闭环成功！距起点 \(distanceStr)m", type: .success)
         } else {
-            print("闭环检测：距离起点 \(String(format: "%.1f", distance)) 米（需要 ≤ \(closureDistanceThreshold) 米）")
+            print("闭环检测：距离起点 \(distanceStr) 米（需要 ≤ \(closureDistanceThreshold) 米）")
+            TerritoryLogger.shared.log("距起点 \(distanceStr)m（需≤30m）", type: .info)
         }
     }
 
@@ -237,24 +251,28 @@ class LocationManager: NSObject, ObservableObject {
             isOverSpeed = false
         }
 
+        let speedStr = String(format: "%.1f", speedKmh)
+
         // 速度检测
         if speedKmh > 30 {
             // 严重超速：停止追踪
-            speedWarning = "移动速度过快（\(String(format: "%.1f", speedKmh)) km/h），已停止圈地"
+            speedWarning = "移动速度过快（\(speedStr) km/h），已停止圈地"
             isOverSpeed = true
+            TerritoryLogger.shared.log("超速 \(speedStr) km/h，已停止追踪", type: .error)
             stopPathTracking()
-            print("❌ 速度检测：\(String(format: "%.1f", speedKmh)) km/h，超过 30 km/h，停止追踪")
+            print("❌ 速度检测：\(speedStr) km/h，超过 30 km/h，停止追踪")
             return false
         } else if speedKmh > 15 {
             // 轻微超速：警告但继续记录
-            speedWarning = "移动速度过快（\(String(format: "%.1f", speedKmh)) km/h），请放慢速度"
+            speedWarning = "移动速度过快（\(speedStr) km/h），请放慢速度"
             isOverSpeed = true
-            print("⚠️ 速度检测：\(String(format: "%.1f", speedKmh)) km/h，超过 15 km/h，发出警告")
+            TerritoryLogger.shared.log("速度较快 \(speedStr) km/h", type: .warning)
+            print("⚠️ 速度检测：\(speedStr) km/h，超过 15 km/h，发出警告")
             return true
         }
 
-        // 正常速度
-        print("✅ 速度检测：\(String(format: "%.1f", speedKmh)) km/h，正常")
+        // 正常速度（不记录日志，避免日志过多）
+        print("✅ 速度检测：\(speedStr) km/h，正常")
         return true
     }
 }
