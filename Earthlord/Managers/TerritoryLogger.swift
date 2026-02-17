@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import Combine  // ⚠️ @Published 和 ObservableObject 需要这个框架
 
 // MARK: - LogType
 /// 日志类型枚举
