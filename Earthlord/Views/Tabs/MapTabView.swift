@@ -75,6 +75,11 @@ struct MapTabView: View {
                 isPathClosed: locationManager.isPathClosed
             )
             .ignoresSafeArea()
+            // ⭐ 末世效果在 SwiftUI 层实现，避免影响轨迹线和多边形颜色
+            // colorMultiply：轻微棕黄色调 (cyan×0.85→仍为青绿, green×0.80→仍为绿色)
+            .colorMultiply(Color(red: 1.0, green: 0.88, blue: 0.72))
+            .saturation(0.72)     // 降低饱和度，模拟末世灰暗感
+            .brightness(-0.04)    // 略微压暗
 
             // 速度警告横幅
             if let warning = locationManager.speedWarning {

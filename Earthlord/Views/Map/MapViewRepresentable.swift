@@ -85,21 +85,10 @@ struct MapViewRepresentable: UIViewRepresentable {
         }
     }
 
-    /// 应用末世滤镜效果（降低饱和度 + 棕褐色调）
+    /// 末世滤镜效果已移至 MapTabView 的 SwiftUI 层处理
+    /// 原因：mapView.layer.filters 会同时影响轨迹线和多边形填充的颜色，导致青色变蓝、绿色不可见
     private func applyApocalypseFilter(to mapView: MKMapView) {
-        // 色调控制：降低饱和度和亮度
-        let colorControls = CIFilter(name: "CIColorControls")
-        colorControls?.setValue(-0.15, forKey: kCIInputBrightnessKey)  // 稍微变暗
-        colorControls?.setValue(0.5, forKey: kCIInputSaturationKey)  // 降低饱和度50%
-
-        // 棕褐色调：废土的泛黄效果
-        let sepiaFilter = CIFilter(name: "CISepiaTone")
-        sepiaFilter?.setValue(0.65, forKey: kCIInputIntensityKey)  // 泛黄强度
-
-        // 应用滤镜到地图图层
-        if let colorControls = colorControls, let sepiaFilter = sepiaFilter {
-            mapView.layer.filters = [colorControls, sepiaFilter]
-        }
+        // 滤镜已移至 SwiftUI 层，此处留空
     }
 
     // MARK: - Coordinator
@@ -159,8 +148,10 @@ struct MapViewRepresentable: UIViewRepresentable {
             // 渲染轨迹线
             if let polyline = overlay as? MKPolyline {
                 let renderer = MKPolylineRenderer(polyline: polyline)
-                // 根据是否闭合改变颜色
-                renderer.strokeColor = parent.isPathClosed ? UIColor.systemGreen : UIColor.systemCyan
+                // 根据是否闭合改变颜色（使用高饱和度颜色，补偿 SwiftUI 滤镜的轻微影响）
+                renderer.strokeColor = parent.isPathClosed
+                    ? UIColor(red: 0.0, green: 1.0, blue: 0.3, alpha: 1.0)   // 闭合：鲜绿色
+                    : UIColor(red: 0.0, green: 0.95, blue: 0.95, alpha: 1.0) // 追踪中：纯青绿色
                 renderer.lineWidth = 5  // 线宽 5pt
                 renderer.lineCap = .round  // 圆头线头
                 return renderer
@@ -169,8 +160,8 @@ struct MapViewRepresentable: UIViewRepresentable {
             // 渲染多边形填充
             if let polygon = overlay as? MKPolygon {
                 let renderer = MKPolygonRenderer(polygon: polygon)
-                renderer.fillColor = UIColor.systemGreen.withAlphaComponent(0.25)  // 半透明绿色填充
-                renderer.strokeColor = UIColor.systemGreen  // 绿色边框
+                renderer.fillColor = UIColor(red: 0.0, green: 1.0, blue: 0.3, alpha: 0.35)  // 半透明鲜绿填充（提高透明度确保可见）
+                renderer.strokeColor = UIColor(red: 0.0, green: 1.0, blue: 0.3, alpha: 1.0)  // 鲜绿边框
                 renderer.lineWidth = 2
                 return renderer
             }
