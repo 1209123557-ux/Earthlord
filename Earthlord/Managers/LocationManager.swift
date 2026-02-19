@@ -130,6 +130,9 @@ class LocationManager: NSObject, ObservableObject {
 
     // MARK: - Path Tracking Methods
 
+    /// 开始追踪的时间（用于上传时记录 started_at）
+    var trackingStartTime: Date = Date()
+
     /// 开始路径追踪
     func startPathTracking() {
         guard isAuthorized else {
@@ -147,6 +150,7 @@ class LocationManager: NSObject, ObservableObject {
         territoryValidationError = nil
         calculatedArea = 0
         manualValidationTriggered = false
+        trackingStartTime = Date()
 
         TerritoryLogger.shared.log("开始圈地追踪", type: .info)
 
@@ -165,13 +169,24 @@ class LocationManager: NSObject, ObservableObject {
         TerritoryLogger.shared.log("停止追踪，共 \(pathCoordinates.count) 个点", type: .info)
 
         // 如果闭环检测未触发（点数不足等），手动停止时也执行验证给用户反馈
-        if !isPathClosed && !pathCoordinates.isEmpty {
+        // ⚠️ 验证已通过时不再重复验证（防止上传成功后调用此方法时误触发）
+        if !isPathClosed && !pathCoordinates.isEmpty && !territoryValidationPassed {
             let result = validateTerritory()
             territoryValidationPassed = result.isValid
             territoryValidationError = result.errorMessage
             // 标记需要显示横幅（通过 manualValidationTriggered 通知 UI）
             manualValidationTriggered = true
         }
+    }
+
+    /// 上传成功后重置路径和验证状态（不触发验证）
+    func resetAfterUpload() {
+        pathCoordinates.removeAll()
+        pathUpdateVersion = 0
+        isPathClosed = false
+        territoryValidationPassed = false
+        territoryValidationError = nil
+        calculatedArea = 0
     }
 
     /// 清除路径

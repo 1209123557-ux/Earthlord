@@ -14,8 +14,10 @@ struct MapTabView: View {
     @EnvironmentObject private var locationManager: LocationManager
 
     // MARK: - State Properties
-    @State private var hasLocatedUser = false  // 是否已完成首次定位
+    @State private var hasLocatedUser = false       // 是否已完成首次定位
     @State private var showValidationBanner = false  // 是否显示验证结果横幅
+    @State private var isUploading = false           // 是否正在上传（防止重复点击）
+    @State private var uploadError: String? = nil    // 上传错误信息
 
     var body: some View {
         ZStack {
@@ -39,11 +41,30 @@ struct MapTabView: View {
             if locationManager.isAuthorized {
                 VStack {
                     Spacer()
+
+                    // 上传错误提示
+                    if let error = uploadError {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.red.opacity(0.9))
+                            .cornerRadius(8)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 8)
+                            .transition(.opacity)
+                    }
+
                     HStack(spacing: 12) {
                         Spacer()
 
-                        // 圈地按钮
-                        claimTerritoryButton
+                        // 验证通过时：显示「确认登记」按钮；否则显示正常圈地按钮
+                        if locationManager.territoryValidationPassed {
+                            confirmTerritoryButton
+                        } else {
+                            claimTerritoryButton
+                        }
 
                         // 定位按钮
                         recenterButton
@@ -257,6 +278,70 @@ struct MapTabView: View {
                 .cornerRadius(25)
                 .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
         }
+    }
+
+    // MARK: - Confirm Territory Button
+    /// 确认登记领地按钮（验证通过后才显示）
+    private var confirmTerritoryButton: some View {
+        Button(action: {
+            Task {
+                await uploadCurrentTerritory()
+            }
+        }) {
+            HStack(spacing: 8) {
+                if isUploading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.8)
+                } else {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 16))
+                }
+                Text(isUploading ? "登记中..." : "确认登记领地")
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(isUploading ? Color.green.opacity(0.6) : Color.green)
+            .cornerRadius(25)
+            .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+        }
+        .disabled(isUploading)
+    }
+
+    // MARK: - Upload Logic
+    /// 上传当前圈定的领地
+    private func uploadCurrentTerritory() async {
+        // ⚠️ 再次检查验证状态，防止绕过验证
+        guard locationManager.territoryValidationPassed else {
+            uploadError = "领地验证未通过，无法上传"
+            return
+        }
+
+        isUploading = true
+        uploadError = nil
+
+        do {
+            try await TerritoryManager.shared.uploadTerritory(
+                coordinates: locationManager.pathCoordinates,
+                area: locationManager.calculatedArea,
+                startTime: locationManager.trackingStartTime
+            )
+
+            // ⚠️ 上传成功：先停止追踪（停计时器），再清除路径和验证状态
+            locationManager.stopPathTracking()
+            locationManager.resetAfterUpload()
+
+        } catch {
+            uploadError = "上传失败: \(error.localizedDescription)"
+            // 错误提示 3 秒后自动消失
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                uploadError = nil
+            }
+        }
+
+        isUploading = false
     }
 
     // MARK: - Helper Methods

@@ -135,12 +135,19 @@ class TerritoryManager {
         )
 
         // 上传到 Supabase
-        try await supabase
-            .from("territories")
-            .insert(payload)
-            .execute()
+        do {
+            try await supabase
+                .from("territories")
+                .insert(payload)
+                .execute()
 
-        print("✅ 领地上传成功，面积: \(String(format: "%.0f", area))m²，点数: \(coordinates.count)")
+            let areaStr = String(format: "%.0f", area)
+            print("✅ 领地上传成功，面积: \(areaStr)m²，点数: \(coordinates.count)")
+            TerritoryLogger.shared.log("领地上传成功！面积: \(areaStr)m²", type: .success)
+        } catch {
+            TerritoryLogger.shared.log("领地上传失败: \(error.localizedDescription)", type: .error)
+            throw error
+        }
     }
 
     // MARK: - 拉取领地
