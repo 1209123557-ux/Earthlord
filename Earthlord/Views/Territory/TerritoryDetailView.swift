@@ -38,16 +38,10 @@ struct TerritoryDetailView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: { dismiss() }) {
-                    Text("关闭")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(Color.white.opacity(0.15))
-                        .cornerRadius(20)
-                }
-                .buttonStyle(.plain)
+                Button("关闭") { dismiss() }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white)
+                    .buttonStyle(.plain)
             }
         }
         .toolbarColorScheme(.dark, for: .navigationBar)
