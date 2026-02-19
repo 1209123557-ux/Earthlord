@@ -61,16 +61,13 @@ class TerritoryManager {
     /// 将坐标数组转为 WKT 多边形字符串（PostGIS 兼容格式）
     /// ⚠️ WKT 规范：经度(longitude)在前，纬度(latitude)在后
     /// ⚠️ 多边形必须闭合：最后一个点与第一个点相同
-    /// 示例：SRID=4326;POLYGON((121.4 31.2, 121.5 31.2, 121.5 31.3, 121.4 31.2))
     func coordinatesToWKT(_ coordinates: [CLLocationCoordinate2D]) -> String {
         guard !coordinates.isEmpty else { return "SRID=4326;POLYGON(())" }
 
-        // 构建坐标点列表（经度 纬度）
         var points = coordinates.map { coord in
             "\(coord.longitude) \(coord.latitude)"
         }
 
-        // 确保多边形闭合：首尾相同
         if let first = points.first {
             points.append(first)
         }
@@ -80,7 +77,6 @@ class TerritoryManager {
     }
 
     /// 计算坐标集合的边界框
-    /// - Returns: (minLat, maxLat, minLon, maxLon)
     func calculateBoundingBox(_ coordinates: [CLLocationCoordinate2D]) -> (minLat: Double, maxLat: Double, minLon: Double, maxLon: Double) {
         let lats = coordinates.map { $0.latitude }
         let lons = coordinates.map { $0.longitude }
@@ -95,31 +91,22 @@ class TerritoryManager {
     // MARK: - 上传领地
 
     /// 上传领地到 Supabase
-    /// - Parameters:
-    ///   - coordinates: 圈地路径坐标数组
-    ///   - area: 领地面积（平方米）
-    ///   - startTime: 开始圈地的时间
-    /// - Throws: 未登录错误或网络错误
     func uploadTerritory(
         coordinates: [CLLocationCoordinate2D],
         area: Double,
         startTime: Date
     ) async throws {
-        // 获取当前登录用户 ID
         guard let userId = AuthManager.shared.currentUser?.id else {
             throw TerritoryError.notLoggedIn
         }
 
-        // 准备各字段数据
         let pathJSON   = coordinatesToPathJSON(coordinates)
         let wktPolygon = coordinatesToWKT(coordinates)
         let bbox       = calculateBoundingBox(coordinates)
 
-        // ISO8601 格式时间字符串
         let formatter = ISO8601DateFormatter()
         let startedAtString = formatter.string(from: startTime)
 
-        // 构建插入载荷（不传 name，数据库允许为空）
         let payload = TerritoryInsert(
             userId:     userId.uuidString,
             path:       pathJSON,
@@ -134,7 +121,6 @@ class TerritoryManager {
             isActive:   true
         )
 
-        // 上传到 Supabase
         do {
             try await supabase
                 .from("territories")
@@ -150,11 +136,9 @@ class TerritoryManager {
         }
     }
 
-    // MARK: - 拉取领地
+    // MARK: - 拉取所有领地（地图展示用）
 
     /// 从 Supabase 拉取所有有效领地（is_active = true）
-    /// - Returns: 领地数组
-    /// - Throws: 网络错误或解码错误
     func loadAllTerritories() async throws -> [Territory] {
         let territories: [Territory] = try await supabase
             .from("territories")
@@ -166,6 +150,45 @@ class TerritoryManager {
         print("✅ 加载了 \(territories.count) 个领地")
         return territories
     }
+
+    // MARK: - 拉取我的领地（领地 Tab 用）
+
+    /// 从 Supabase 拉取当前用户的所有有效领地，按创建时间倒序
+    func loadMyTerritories() async throws -> [Territory] {
+        guard let userId = AuthManager.shared.currentUser?.id else {
+            throw TerritoryError.notLoggedIn
+        }
+
+        let territories: [Territory] = try await supabase
+            .from("territories")
+            .select()
+            .eq("user_id", value: userId.uuidString.lowercased())
+            .eq("is_active", value: true)
+            .order("created_at", ascending: false)
+            .execute()
+            .value
+
+        print("✅ 加载了我的 \(territories.count) 个领地")
+        return territories
+    }
+
+    // MARK: - 删除领地（软删除）
+
+    /// 将指定领地标记为非活跃（is_active = false）
+    func deleteTerritory(territoryId: String) async throws {
+        guard AuthManager.shared.currentUser != nil else {
+            throw TerritoryError.notLoggedIn
+        }
+
+        try await supabase
+            .from("territories")
+            .update(["is_active": false])
+            .eq("id", value: territoryId)
+            .execute()
+
+        print("✅ 领地已删除: \(territoryId)")
+        TerritoryLogger.shared.log("领地已删除", type: .info)
+    }
 }
 
 // MARK: - 错误类型
@@ -176,7 +199,7 @@ enum TerritoryError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notLoggedIn:
-            return "请先登录后再上传领地"
+            return "请先登录后再操作领地"
         }
     }
 }
