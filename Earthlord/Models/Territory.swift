@@ -42,12 +42,12 @@ struct Territory: Codable, Identifiable {
         }
     }
 
-    // MARK: - 显示名称（无名称时用 ID 前6位）
+    // MARK: - 显示名称（无名称时显示「未命名领地」）
     var displayName: String {
         if let name = name, !name.isEmpty {
             return name
         }
-        return "领地 #\(id.prefix(6).uppercased())"
+        return "未命名领地"
     }
 
     // MARK: - 格式化面积
