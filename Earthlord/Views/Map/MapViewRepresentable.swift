@@ -2,7 +2,7 @@
 //  MapViewRepresentable.swift
 //  Earthlord
 //
-//  MKMapView 的 SwiftUI 包装器 - 显示苹果地图并应用末世滤镜
+//  MKMapView 的 SwiftUI 包装器 - 显示苹果地图、轨迹、领地多边形
 //
 
 import SwiftUI
@@ -27,142 +27,174 @@ struct MapViewRepresentable: UIViewRepresentable {
     /// 路径是否闭合
     let isPathClosed: Bool
 
+    // MARK: - Territory Display
+    /// 已加载的领地列表
+    let territories: [Territory]
+    /// 当前用户 ID（用于区分自己/他人领地颜色）
+    let currentUserId: String?
+    /// 领地版本号（只在该值变化时才重绘领地，避免频繁刷新）
+    let territoriesVersion: Int
+
     // MARK: - UIViewRepresentable Methods
-    /// 创建并配置 MKMapView
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
 
-        // 基础配置
-        mapView.mapType = .hybrid  // 卫星图 + 道路标签（末世废土风格）
-        mapView.pointOfInterestFilter = .excludingAll  // 隐藏所有 POI（星巴克、麦当劳等）
-        mapView.showsBuildings = false  // 隐藏 3D 建筑
-        mapView.showsUserLocation = true  // ⭐ 显示用户位置蓝点（关键！）
-        mapView.isZoomEnabled = true  // 允许双指缩放
-        mapView.isScrollEnabled = true  // 允许单指拖动
-        mapView.isRotateEnabled = true  // 允许旋转
-        mapView.isPitchEnabled = false  // 禁用 3D 倾斜
-
-        // ⭐ 设置代理（关键！必须设置才能接收位置更新回调）
+        mapView.mapType = .hybrid
+        mapView.pointOfInterestFilter = .excludingAll
+        mapView.showsBuildings = false
+        mapView.showsUserLocation = true
+        mapView.isZoomEnabled = true
+        mapView.isScrollEnabled = true
+        mapView.isRotateEnabled = true
+        mapView.isPitchEnabled = false
         mapView.delegate = context.coordinator
-
-        // 应用末世滤镜效果
-        applyApocalypseFilter(to: mapView)
 
         return mapView
     }
 
-    /// 更新视图（用于更新路径轨迹）
     func updateUIView(_ uiView: MKMapView, context: Context) {
-        // 更新路径轨迹
+        // 每次更新都刷新追踪轨迹
         updateTrackingPath(uiView, context: context)
+
+        // 只有领地版本号变化时才重绘领地（性能优化）
+        if territoriesVersion != context.coordinator.lastTerritoryVersion {
+            context.coordinator.lastTerritoryVersion = territoriesVersion
+            drawTerritories(on: uiView)
+        }
     }
 
-    /// 创建协调器（处理地图代理回调）
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
 
-    // MARK: - Private Methods
-    /// 更新路径轨迹显示
+    // MARK: - Private: Tracking Path
+    /// 更新路径轨迹显示（仅移除轨迹覆盖层，保留领地多边形）
     private func updateTrackingPath(_ mapView: MKMapView, context: Context) {
-        // 移除旧的覆盖层（轨迹线和多边形）
-        mapView.removeOverlays(mapView.overlays)
+        // 只移除追踪相关的覆盖层，title 为 "mine"/"others" 的领地多边形保留
+        let trackingOverlays = mapView.overlays.filter { overlay in
+            if overlay is MKPolyline { return true }
+            if let polygon = overlay as? MKPolygon {
+                let t = polygon.title
+                return t != "mine" && t != "others"
+            }
+            return false
+        }
+        mapView.removeOverlays(trackingOverlays)
 
-        // 如果没有路径点，直接返回
         guard trackingPath.count >= 2 else { return }
 
-        // ⭐ 关键：转换坐标（WGS-84 → GCJ-02）
+        // ⭐ WGS-84 → GCJ-02（修正中国地图偏移）
         let gcj02Coordinates = CoordinateConverter.convertPath(trackingPath)
 
-        // 创建轨迹线
         let polyline = MKPolyline(coordinates: gcj02Coordinates, count: gcj02Coordinates.count)
         mapView.addOverlay(polyline)
 
-        // 如果路径已闭合且点数 ≥ 3，添加多边形填充
         if isPathClosed && gcj02Coordinates.count >= 3 {
             let polygon = MKPolygon(coordinates: gcj02Coordinates, count: gcj02Coordinates.count)
             mapView.addOverlay(polygon)
         }
     }
 
-    /// 末世滤镜效果已移至 MapTabView 的 SwiftUI 层处理
-    /// 原因：mapView.layer.filters 会同时影响轨迹线和多边形填充的颜色，导致青色变蓝、绿色不可见
-    private func applyApocalypseFilter(to mapView: MKMapView) {
-        // 滤镜已移至 SwiftUI 层，此处留空
+    // MARK: - Private: Territory Drawing
+    /// 绘制所有已加载的领地（我的=绿色，他人=橙色）
+    private func drawTerritories(on mapView: MKMapView) {
+        // 移除旧的领地多边形
+        let old = mapView.overlays.filter { overlay in
+            if let polygon = overlay as? MKPolygon {
+                return polygon.title == "mine" || polygon.title == "others"
+            }
+            return false
+        }
+        mapView.removeOverlays(old)
+
+        for territory in territories {
+            var coords = territory.toCoordinates()
+
+            // ⚠️ 数据库存的是 WGS-84，显示前必须转换
+            coords = coords.map { CoordinateConverter.wgs84ToGcj02($0) }
+            guard coords.count >= 3 else { continue }
+
+            let polygon = MKPolygon(coordinates: coords, count: coords.count)
+
+            // ⚠️ UUID 比较必须统一大小写！
+            // 数据库存小写，iOS uuidString 返回大写
+            let isMine = territory.userId.lowercased() == currentUserId?.lowercased()
+            polygon.title = isMine ? "mine" : "others"
+
+            mapView.addOverlay(polygon, level: .aboveRoads)
+        }
     }
 
     // MARK: - Coordinator
-    /// 地图代理协调器 - 处理地图回调
     class Coordinator: NSObject, MKMapViewDelegate {
         var parent: MapViewRepresentable
-        private var hasInitialCentered = false  // 防止重复居中
+        /// 上次绘制领地时的版本号（防止重复绘制）
+        var lastTerritoryVersion = -1
+        private var hasInitialCentered = false
 
         init(_ parent: MapViewRepresentable) {
             self.parent = parent
         }
 
-        // ⭐ 关键方法：用户位置更新时调用（实现自动居中）
         func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
-            // 获取位置
             guard let location = userLocation.location else { return }
 
-            // 更新绑定的位置
             DispatchQueue.main.async {
                 self.parent.userLocation = location.coordinate
             }
 
-            // 首次获得位置时，自动居中地图
             guard !hasInitialCentered else { return }
 
-            // 创建居中区域（约 1 公里范围）
             let region = MKCoordinateRegion(
                 center: location.coordinate,
-                latitudinalMeters: 1000,  // 纬度方向 1 公里
-                longitudinalMeters: 1000   // 经度方向 1 公里
+                latitudinalMeters: 1000,
+                longitudinalMeters: 1000
             )
-
-            // ⭐ 平滑居中地图（animated: true 实现平滑过渡）
             mapView.setRegion(region, animated: true)
-
-            // 标记已完成首次居中（之后用户可以自由拖动地图）
             hasInitialCentered = true
 
-            // 更新外部状态
             DispatchQueue.main.async {
                 self.parent.hasLocatedUser = true
             }
         }
 
-        // 区域改变时调用
-        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
-            // 可用于后续功能（如加载附近的领地）
-        }
+        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {}
+        func mapViewDidFinishLoadingMap(_ mapView: MKMapView) {}
 
-        // 地图加载完成时调用
-        func mapViewDidFinishLoadingMap(_ mapView: MKMapView) {
-            // 可用于后续功能（如显示加载完成提示）
-        }
-
-        // ⭐ 关键方法：渲染轨迹线和多边形（必须实现，否则轨迹添加了也看不见！）
+        // ⭐ 渲染所有覆盖层：追踪轨迹、当前路径多边形、领地多边形
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            // 渲染轨迹线
+            // 追踪轨迹线
             if let polyline = overlay as? MKPolyline {
                 let renderer = MKPolylineRenderer(polyline: polyline)
-                // 根据是否闭合改变颜色（使用高饱和度颜色，补偿 SwiftUI 滤镜的轻微影响）
                 renderer.strokeColor = parent.isPathClosed
-                    ? UIColor(red: 0.0, green: 1.0, blue: 0.3, alpha: 1.0)   // 闭合：鲜绿色
-                    : UIColor(red: 0.0, green: 0.95, blue: 0.95, alpha: 1.0) // 追踪中：纯青绿色
-                renderer.lineWidth = 5  // 线宽 5pt
-                renderer.lineCap = .round  // 圆头线头
+                    ? UIColor(red: 0.0, green: 1.0, blue: 0.3, alpha: 1.0)
+                    : UIColor(red: 0.0, green: 0.95, blue: 0.95, alpha: 1.0)
+                renderer.lineWidth = 5
+                renderer.lineCap = .round
                 return renderer
             }
 
-            // 渲染多边形填充
+            // 多边形（领地 or 当前追踪区域）
             if let polygon = overlay as? MKPolygon {
                 let renderer = MKPolygonRenderer(polygon: polygon)
-                renderer.fillColor = UIColor(red: 0.0, green: 1.0, blue: 0.3, alpha: 0.35)  // 半透明鲜绿填充（提高透明度确保可见）
-                renderer.strokeColor = UIColor(red: 0.0, green: 1.0, blue: 0.3, alpha: 1.0)  // 鲜绿边框
-                renderer.lineWidth = 2
+
+                switch polygon.title {
+                case "mine":
+                    // 我的领地：绿色
+                    renderer.fillColor   = UIColor.systemGreen.withAlphaComponent(0.25)
+                    renderer.strokeColor = UIColor.systemGreen
+                    renderer.lineWidth   = 2.0
+                case "others":
+                    // 他人领地：橙色
+                    renderer.fillColor   = UIColor.systemOrange.withAlphaComponent(0.25)
+                    renderer.strokeColor = UIColor.systemOrange
+                    renderer.lineWidth   = 2.0
+                default:
+                    // 当前正在圈定的区域：亮绿色
+                    renderer.fillColor   = UIColor(red: 0.0, green: 1.0, blue: 0.3, alpha: 0.35)
+                    renderer.strokeColor = UIColor(red: 0.0, green: 1.0, blue: 0.3, alpha: 1.0)
+                    renderer.lineWidth   = 2
+                }
                 return renderer
             }
 
@@ -179,6 +211,9 @@ struct MapViewRepresentable: UIViewRepresentable {
         trackingPath: .constant([]),
         pathUpdateVersion: 0,
         isTracking: false,
-        isPathClosed: false
+        isPathClosed: false,
+        territories: [],
+        currentUserId: nil,
+        territoriesVersion: 0
     )
 }
