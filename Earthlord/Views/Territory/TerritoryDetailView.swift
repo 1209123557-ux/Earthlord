@@ -47,6 +47,7 @@ struct TerritoryDetailView: View {
                         .background(Color.white.opacity(0.15))
                         .cornerRadius(20)
                 }
+                .buttonStyle(.plain)
             }
         }
         .toolbarColorScheme(.dark, for: .navigationBar)
