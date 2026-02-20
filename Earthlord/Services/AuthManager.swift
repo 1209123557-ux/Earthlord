@@ -120,6 +120,11 @@ class AuthManager: ObservableObject {
         isLoading = true
         errorMessage = nil
 
+        // ⚠️ 必须在 verifyOTP 之前设置，防止竞态条件：
+        // verifyOTP 会立即触发 Supabase .signedIn 事件，
+        // 若此时 needsPasswordSetup=false，监听器会直接把 isAuthenticated 设为 true，跳过密码设置步骤。
+        needsPasswordSetup = true
+
         do {
             // type: .email 用于注册/登录验证
             let response = try await supabase.auth.verifyOTP(
@@ -128,12 +133,10 @@ class AuthManager: ObservableObject {
                 type: .email
             )
             currentUser = response.user
-
-            // 验证码已验证，进入密码设置阶段
             otpVerified = true
-            needsPasswordSetup = true
-            // 注意：isAuthenticated 保持 false，强制用户设置密码
+            // isAuthenticated 保持 false，强制用户完成第三步（设置密码）
         } catch {
+            needsPasswordSetup = false  // 验证失败，重置状态
             errorMessage = "验证码验证失败：\(error.localizedDescription)"
         }
 
