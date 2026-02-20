@@ -7,22 +7,33 @@
 
 import SwiftUI
 import MapKit
+import UIKit
 import Supabase
 
 struct MapTabView: View {
     // MARK: - Environment
     @EnvironmentObject private var locationManager: LocationManager
 
-    // MARK: - State Properties
+    // MARK: - 地图/领地状态
     @State private var hasLocatedUser = false
     @State private var isUploading = false
     @State private var uploadError: String? = nil
     @State private var territories: [Territory] = []
     @State private var territoriesVersion = 0
 
-    // MARK: - Computed: 是否有验证结果
+    // MARK: - Day 19: 碰撞检测状态
+    @State private var collisionCheckTimer: Timer?
+    @State private var collisionWarning: String? = nil
+    @State private var showCollisionWarning = false
+    @State private var collisionWarningLevel: WarningLevel = .safe
+
+    // MARK: - Computed
     private var hasValidationResult: Bool {
         locationManager.territoryValidationPassed || locationManager.territoryValidationError != nil
+    }
+
+    private var currentUserId: String? {
+        AuthManager.shared.currentUser?.id.uuidString
     }
 
     // MARK: - Body
@@ -38,7 +49,6 @@ struct MapTabView: View {
                 permissionRequestView
             }
 
-            // 底部操作区（仅已授权时）
             if locationManager.isAuthorized {
                 VStack {
                     Spacer()
@@ -67,7 +77,7 @@ struct MapTabView: View {
                 isTracking: locationManager.isTracking,
                 isPathClosed: locationManager.isPathClosed,
                 territories: territories,
-                currentUserId: AuthManager.shared.currentUser?.id.uuidString,
+                currentUserId: currentUserId,
                 territoriesVersion: territoriesVersion
             )
             .ignoresSafeArea()
@@ -84,6 +94,11 @@ struct MapTabView: View {
                     Spacer()
                 }
             }
+
+            // Day 19: 碰撞警告横幅（分级颜色）
+            if showCollisionWarning, let warning = collisionWarning {
+                collisionWarningBanner(message: warning, level: collisionWarningLevel)
+            }
         }
         .onReceive(locationManager.$manualValidationTriggered) { triggered in
             if triggered {
@@ -93,14 +108,11 @@ struct MapTabView: View {
     }
 
     // MARK: - Bottom Action Area
-    /// 底部操作区：有验证结果时显示卡片+按钮；否则显示普通按钮
     private var bottomActionArea: some View {
         Group {
             if hasValidationResult {
-                // 验证结果卡片布局（对齐参考图）
                 HStack(alignment: .bottom, spacing: 12) {
                     validationResultCard
-                    // 右侧按钮组
                     VStack(spacing: 10) {
                         if locationManager.territoryValidationPassed {
                             confirmButton
@@ -112,7 +124,6 @@ struct MapTabView: View {
                 .padding(.bottom, 40)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
-                // 普通圈地按钮布局
                 HStack(spacing: 12) {
                     Spacer()
                     claimTerritoryButton
@@ -126,7 +137,6 @@ struct MapTabView: View {
     }
 
     // MARK: - Validation Result Card
-    /// 验证结果卡片（成功=绿色，失败=红色）
     private var validationResultCard: some View {
         HStack(spacing: 12) {
             Image(systemName: locationManager.territoryValidationPassed
@@ -136,8 +146,7 @@ struct MapTabView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(locationManager.territoryValidationPassed ? "验证通过" : "验证失败")
-                    .font(.headline)
-                    .fontWeight(.bold)
+                    .font(.headline).fontWeight(.bold)
 
                 if locationManager.territoryValidationPassed {
                     Text("面积: \(String(format: "%.0f", locationManager.calculatedArea))m²")
@@ -158,8 +167,7 @@ struct MapTabView: View {
         .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
     }
 
-    // MARK: - Confirm Button (compact)
-    /// 确认登记按钮（仅验证通过时显示）
+    // MARK: - Confirm Button
     private var confirmButton: some View {
         Button(action: {
             Task { await uploadCurrentTerritory() }
@@ -186,14 +194,14 @@ struct MapTabView: View {
         .disabled(isUploading)
     }
 
-    // MARK: - Compact Claim Button (shown in validation area)
-    /// 验证结果区右侧的停止/开始按钮（带点数）
+    // MARK: - Compact Claim Button（验证结果区）
     private var compactClaimButton: some View {
         Button(action: {
             if locationManager.isTracking {
+                stopCollisionMonitoring()
                 locationManager.stopPathTracking()
             } else {
-                locationManager.startPathTracking()
+                startClaimingWithCollisionCheck()
             }
         }) {
             VStack(spacing: 2) {
@@ -217,14 +225,14 @@ struct MapTabView: View {
         }
     }
 
-    // MARK: - Claim Territory Button (normal)
-    /// 普通圈地按钮（无验证结果时显示）
+    // MARK: - Claim Territory Button（普通状态）
     private var claimTerritoryButton: some View {
         Button(action: {
             if locationManager.isTracking {
+                stopCollisionMonitoring()
                 locationManager.stopPathTracking()
             } else {
-                locationManager.startPathTracking()
+                startClaimingWithCollisionCheck()
             }
         }) {
             HStack(spacing: 8) {
@@ -260,7 +268,201 @@ struct MapTabView: View {
         }
     }
 
+    // MARK: - Day 19: 带碰撞检测的开始圈地
+
+    private func startClaimingWithCollisionCheck() {
+        guard let location = locationManager.userLocation,
+              let userId = currentUserId else {
+            locationManager.startPathTracking()
+            return
+        }
+
+        let result = TerritoryManager.shared.checkPointCollision(
+            location: location,
+            currentUserId: userId
+        )
+
+        if result.hasCollision {
+            collisionWarning = result.message
+            collisionWarningLevel = .violation
+            showCollisionWarning = true
+
+            let generator = UINotificationFeedbackGenerator()
+            generator.prepare()
+            generator.notificationOccurred(.error)
+
+            TerritoryLogger.shared.log("起点碰撞：阻止圈地", type: .error)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                showCollisionWarning = false
+                collisionWarning = nil
+                collisionWarningLevel = .safe
+            }
+            return
+        }
+
+        TerritoryLogger.shared.log("起始点安全，开始圈地", type: .info)
+        locationManager.startPathTracking()
+        startCollisionMonitoring()
+    }
+
+    // MARK: - Day 19: 碰撞监控定时器
+
+    private func startCollisionMonitoring() {
+        stopCollisionCheckTimer()
+        collisionCheckTimer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { _ in
+            performCollisionCheck()
+        }
+        TerritoryLogger.shared.log("碰撞检测定时器已启动", type: .info)
+    }
+
+    /// 只停止定时器，不清除警告（violation 时保留横幅显示）
+    private func stopCollisionCheckTimer() {
+        collisionCheckTimer?.invalidate()
+        collisionCheckTimer = nil
+    }
+
+    /// 完全停止：停止定时器 + 清除警告状态
+    private func stopCollisionMonitoring() {
+        stopCollisionCheckTimer()
+        showCollisionWarning = false
+        collisionWarning = nil
+        collisionWarningLevel = .safe
+    }
+
+    // MARK: - Day 19: 执行碰撞检测
+
+    private func performCollisionCheck() {
+        guard locationManager.isTracking,
+              let userId = currentUserId else { return }
+
+        let path = locationManager.pathCoordinates
+        guard path.count >= 2 else { return }
+
+        let result = TerritoryManager.shared.checkPathCollisionComprehensive(
+            path: path,
+            currentUserId: userId
+        )
+
+        switch result.warningLevel {
+        case .safe:
+            showCollisionWarning = false
+            collisionWarning = nil
+            collisionWarningLevel = .safe
+
+        case .caution:
+            collisionWarning = result.message
+            collisionWarningLevel = .caution
+            showCollisionWarning = true
+            triggerHapticFeedback(level: .caution)
+
+        case .warning:
+            collisionWarning = result.message
+            collisionWarningLevel = .warning
+            showCollisionWarning = true
+            triggerHapticFeedback(level: .warning)
+
+        case .danger:
+            collisionWarning = result.message
+            collisionWarningLevel = .danger
+            showCollisionWarning = true
+            triggerHapticFeedback(level: .danger)
+
+        case .violation:
+            // 1. 先设置横幅（必须在 stop 之前！）
+            collisionWarning = result.message
+            collisionWarningLevel = .violation
+            showCollisionWarning = true
+
+            // 2. 震动
+            triggerHapticFeedback(level: .violation)
+
+            // 3. 只停止定时器，不清除横幅
+            stopCollisionCheckTimer()
+
+            // 4. 停止圈地
+            locationManager.stopPathTracking()
+
+            TerritoryLogger.shared.log("碰撞违规，自动停止圈地", type: .error)
+
+            // 5. 5 秒后清除横幅
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                showCollisionWarning = false
+                collisionWarning = nil
+                collisionWarningLevel = .safe
+            }
+        }
+    }
+
+    // MARK: - Day 19: 震动反馈
+
+    private func triggerHapticFeedback(level: WarningLevel) {
+        switch level {
+        case .safe:
+            break
+
+        case .caution:
+            let g = UINotificationFeedbackGenerator()
+            g.prepare()
+            g.notificationOccurred(.warning)
+
+        case .warning:
+            let g = UIImpactFeedbackGenerator(style: .medium)
+            g.prepare()
+            g.impactOccurred()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { g.impactOccurred() }
+
+        case .danger:
+            let g = UIImpactFeedbackGenerator(style: .heavy)
+            g.prepare()
+            g.impactOccurred()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { g.impactOccurred() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { g.impactOccurred() }
+
+        case .violation:
+            let g = UINotificationFeedbackGenerator()
+            g.prepare()
+            g.notificationOccurred(.error)
+        }
+    }
+
+    // MARK: - Day 19: 碰撞警告横幅
+
+    private func collisionWarningBanner(message: String, level: WarningLevel) -> some View {
+        let bgColor: Color
+        switch level {
+        case .safe:    bgColor = .green
+        case .caution: bgColor = .yellow
+        case .warning: bgColor = .orange
+        case .danger, .violation: bgColor = .red
+        }
+
+        let textColor: Color = (level == .caution) ? .black : .white
+        let iconName = (level == .violation) ? "xmark.octagon.fill" : "exclamationmark.triangle.fill"
+
+        return VStack {
+            HStack(spacing: 8) {
+                Image(systemName: iconName)
+                    .font(.system(size: 18))
+                Text(message)
+                    .font(.system(size: 14, weight: .medium))
+            }
+            .foregroundColor(textColor)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(bgColor.opacity(0.95))
+            .cornerRadius(25)
+            .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+            .padding(.top, 120)
+
+            Spacer()
+        }
+        .transition(.move(edge: .top).combined(with: .opacity))
+        .animation(.easeInOut(duration: 0.3), value: showCollisionWarning)
+    }
+
     // MARK: - Upload Logic
+
     private func uploadCurrentTerritory() async {
         guard locationManager.territoryValidationPassed else { return }
 
@@ -273,9 +475,9 @@ struct MapTabView: View {
                 area: locationManager.calculatedArea,
                 startTime: locationManager.trackingStartTime
             )
+            stopCollisionMonitoring()
             locationManager.stopPathTracking()
             locationManager.resetAfterUpload()
-            // 上传成功后刷新地图上的领地
             await loadTerritories()
         } catch {
             uploadError = "上传失败: \(error.localizedDescription)"
@@ -288,6 +490,7 @@ struct MapTabView: View {
     }
 
     // MARK: - Load Territories
+
     private func loadTerritories() async {
         do {
             territories = try await TerritoryManager.shared.loadAllTerritories()
