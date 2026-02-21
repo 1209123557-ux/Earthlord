@@ -176,10 +176,10 @@ struct POIListView: View {
                     emptyState
                 } else {
                     ForEach(filteredPOIs) { poi in
-                        POICard(poi: poi) {
-                            // 跳转详情页占位（待 POIDetailView 创建后替换）
-                            print("点击 POI：\(poi.name)（id: \(poi.id)）")
+                        NavigationLink(destination: POIDetailView(poi: poi)) {
+                            POICard(poi: poi)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -215,20 +215,16 @@ struct POIListView: View {
 
 private struct POICard: View {
     let poi: POI
-    let onTap: () -> Void
 
     var body: some View {
-        Button(action: onTap) {
-            ELCard(padding: EdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14)) {
-                HStack(spacing: 14) {
-                    typeIcon
-                    infoColumn
-                    Spacer()
-                    rightBadge
-                }
+        ELCard(padding: EdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14)) {
+            HStack(spacing: 14) {
+                typeIcon
+                infoColumn
+                Spacer()
+                rightBadge
             }
         }
-        .buttonStyle(.plain)
     }
 
     // 左侧类型图标
