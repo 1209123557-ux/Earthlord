@@ -31,8 +31,10 @@ private func typeStyle(for type: String) -> POITypeStyle {
 struct POIListView: View {
 
     // MARK: - 状态
-    @State private var isSearching = false
+    @State private var isSearching    = false
     @State private var selectedCategory = "全部"
+    @State private var listVisible    = false   // 控制列表错开淡入
+    @State private var searchScaled   = false   // 控制搜索按钮缩放
 
     // MARK: - 假数据
     /// 模拟 GPS 坐标（真实接入后改为 locationManager.userLocation）
@@ -103,7 +105,14 @@ struct POIListView: View {
 
     // MARK: - 搜索按钮
     private var searchButton: some View {
-        Button(action: triggerSearch) {
+        Button(action: {
+            // 轻微缩放反馈
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.5)) { searchScaled = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.13) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { searchScaled = false }
+            }
+            triggerSearch()
+        }) {
             HStack(spacing: 10) {
                 if isSearching {
                     ProgressView()
@@ -130,6 +139,7 @@ struct POIListView: View {
             .shadow(color: ApocalypseTheme.primary.opacity(0.35), radius: 6, x: 0, y: 3)
         }
         .disabled(isSearching)
+        .scaleEffect(searchScaled ? 0.94 : 1.0)
         .padding(.horizontal, 16)
     }
 
@@ -175,16 +185,35 @@ struct POIListView: View {
                 if filteredPOIs.isEmpty {
                     emptyState
                 } else {
-                    ForEach(filteredPOIs) { poi in
+                    ForEach(Array(filteredPOIs.enumerated()), id: \.element.id) { idx, poi in
                         NavigationLink(destination: POIDetailView(poi: poi)) {
                             POICard(poi: poi)
                         }
                         .buttonStyle(.plain)
+                        // 错开淡入：每张卡延迟 0.07s，最多延迟到第 5 张
+                        .opacity(listVisible ? 1 : 0)
+                        .offset(y: listVisible ? 0 : 12)
+                        .animation(
+                            .easeOut(duration: 0.32).delay(Double(min(idx, 5)) * 0.07),
+                            value: listVisible
+                        )
                     }
                 }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
+        }
+        .onAppear {
+            guard !listVisible else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                listVisible = true
+            }
+        }
+        .onChange(of: selectedCategory) { _ in
+            listVisible = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                listVisible = true
+            }
         }
     }
 

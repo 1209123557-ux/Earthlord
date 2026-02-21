@@ -18,6 +18,10 @@ struct ExplorationResultView: View {
     @State private var statsVisible   = false
     @State private var lootVisible    = false
 
+    // 数字递增动画
+    @State private var countedWalk = 0
+    @State private var countedArea = 0
+
     var body: some View {
         ZStack {
             ApocalypseTheme.background.ignoresSafeArea()
@@ -92,7 +96,7 @@ struct ExplorationResultView: View {
                     icon: "figure.walk",
                     iconColor: ApocalypseTheme.info,
                     title: "行走距离",
-                    current: formatDistance(result.walkDistanceM),
+                    current: formatDistance(countedWalk),          // 动态递增
                     cumulative: formatDistance(result.totalWalkDistanceM),
                     rank: result.walkRank
                 )
@@ -102,7 +106,7 @@ struct ExplorationResultView: View {
                     icon: "map.fill",
                     iconColor: ApocalypseTheme.success,
                     title: "探索面积",
-                    current: formatArea(result.exploredAreaM2),
+                    current: formatArea(countedArea),              // 动态递增
                     cumulative: formatArea(result.totalExploredAreaM2),
                     rank: result.areaRank
                 )
@@ -210,7 +214,7 @@ struct ExplorationResultView: View {
                 // 物品列表
                 VStack(spacing: 0) {
                     ForEach(Array(result.lootedItems.enumerated()), id: \.offset) { idx, loot in
-                        lootRow(loot: loot)
+                        lootRow(loot: loot, index: idx)
                         if idx < result.lootedItems.count - 1 {
                             Rectangle()
                                 .fill(Color.white.opacity(0.06))
@@ -237,13 +241,16 @@ struct ExplorationResultView: View {
                 .cornerRadius(8)
             }
         }
+        // 卡片整体在 lootVisible 时快速出现，内部物品行逐条错开
         .opacity(lootVisible ? 1 : 0)
-        .offset(y: lootVisible ? 0 : 20)
+        .animation(.easeOut(duration: 0.2), value: lootVisible)
     }
 
-    private func lootRow(loot: (itemId: String, quantity: Int)) -> some View {
+    private func lootRow(loot: (itemId: String, quantity: Int), index: Int) -> some View {
         let def = MockItemDefinitions.find(loot.itemId)
         let (icon, color) = iconAndColor(for: def?.category)
+        // 每行的延迟：在 lootVisible 触发后，各行错开 0.18s
+        let rowDelay = Double(index) * 0.18
 
         return HStack(spacing: 12) {
             // 左：分类图标
@@ -263,7 +270,7 @@ struct ExplorationResultView: View {
 
             Spacer()
 
-            // 右：数量 + 对勾
+            // 右：数量 + 对勾（对勾有弹跳效果）
             HStack(spacing: 8) {
                 Text("×\(loot.quantity)")
                     .font(.system(size: 15, weight: .bold))
@@ -271,10 +278,24 @@ struct ExplorationResultView: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 16))
                     .foregroundColor(ApocalypseTheme.success)
+                    // 弹跳：从 0.1 弹出到 1，低阻尼产生回弹感
+                    .scaleEffect(lootVisible ? 1.0 : 0.1)
+                    .animation(
+                        .spring(response: 0.38, dampingFraction: 0.42)
+                            .delay(rowDelay + 0.18),
+                        value: lootVisible
+                    )
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 11)
+        // 行整体：向上滑入 + 淡入
+        .opacity(lootVisible ? 1 : 0)
+        .offset(y: lootVisible ? 0 : 10)
+        .animation(
+            .easeOut(duration: 0.3).delay(rowDelay),
+            value: lootVisible
+        )
     }
 
     /// 根据物品分类返回图标和颜色
@@ -339,6 +360,33 @@ struct ExplorationResultView: View {
         }
         withAnimation(.easeOut(duration: 0.4).delay(0.45)) {
             lootVisible = true
+        }
+        // 统计数字从 0 跳动到目标值（与统计卡同步开始）
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            startCounting()
+        }
+    }
+
+    /// 数字递增动画：24 帧 ease-out，约 0.7 秒完成
+    private func startCounting() {
+        let steps    = 24
+        let duration = 0.7
+        let interval = duration / Double(steps)
+        let targetWalk = result.walkDistanceM
+        let targetArea = result.exploredAreaM2
+
+        for i in 1...steps {
+            let t      = Double(i) / Double(steps)
+            let eased  = 1 - pow(1 - t, 3)   // cubic ease-out
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * interval) {
+                countedWalk = Int(Double(targetWalk) * eased)
+                countedArea = Int(Double(targetArea) * eased)
+            }
+        }
+        // 保证最终值精确
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.05) {
+            countedWalk = targetWalk
+            countedArea = targetArea
         }
     }
 }

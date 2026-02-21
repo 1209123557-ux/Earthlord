@@ -203,7 +203,9 @@ struct BackpackView: View {
             }
         }()
 
-        return Button(action: { selectedCategory = label }) {
+        return Button(action: {
+            withAnimation(.easeInOut(duration: 0.22)) { selectedCategory = label }
+        }) {
             HStack(spacing: 5) {
                 Image(systemName: icon)
                     .font(.system(size: 12))
@@ -230,14 +232,21 @@ struct BackpackView: View {
             LazyVStack(spacing: 10) {
                 if filteredItems.isEmpty {
                     emptyState
+                        .transition(.opacity)
                 } else {
                     ForEach(filteredItems) { item in
                         BackpackItemRow(item: item)
+                            .transition(.asymmetric(
+                                insertion: .opacity.combined(with: .move(edge: .bottom)),
+                                removal:   .opacity
+                            ))
                     }
                 }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
+            // 整体动画：分类切换时平滑过渡
+            .animation(.easeInOut(duration: 0.22), value: selectedCategory)
         }
     }
 
