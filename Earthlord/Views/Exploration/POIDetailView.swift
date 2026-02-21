@@ -126,7 +126,7 @@ struct POIDetailView: View {
         }
         .toolbarColorScheme(.dark, for: .navigationBar)
         .sheet(isPresented: $showExploreResult) {
-            ExploreResultSheet(poi: poi)
+            ExplorationResultView(result: MockExplorationResult.sample)
         }
     }
 
@@ -352,135 +352,6 @@ struct POIDetailView: View {
             )
         }
         .buttonStyle(.plain)
-    }
-}
-
-// MARK: - ExploreResultSheet（探索结果弹层）
-
-private struct ExploreResultSheet: View {
-    let poi: POI
-    @Environment(\.dismiss) private var dismiss
-
-    private let result = MockExplorationResult.sample
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                ApocalypseTheme.background.ignoresSafeArea()
-
-                ScrollView {
-                    VStack(spacing: 20) {
-                        successHeader
-                        lootSection
-                        statsSection
-                    }
-                    .padding(20)
-                }
-            }
-            .navigationTitle("探索完成")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("完成") { dismiss() }
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(ApocalypseTheme.primary)
-                }
-            }
-        }
-    }
-
-    // 成功标题
-    private var successHeader: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 52))
-                .foregroundColor(ApocalypseTheme.success)
-            Text("成功搜寻「\(poi.name)」")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundColor(ApocalypseTheme.textPrimary)
-            Text("探索时长 \(result.durationMinutes) 分钟")
-                .font(.subheadline)
-                .foregroundColor(ApocalypseTheme.textSecondary)
-        }
-        .padding(.top, 8)
-    }
-
-    // 获得物品
-    private var lootSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("获得物品")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundColor(ApocalypseTheme.textPrimary)
-
-            VStack(spacing: 0) {
-                ForEach(Array(result.lootedItems.enumerated()), id: \.offset) { idx, loot in
-                    if let def = MockItemDefinitions.find(loot.itemId) {
-                        HStack {
-                            Image(systemName: "shippingbox.fill")
-                                .foregroundColor(ApocalypseTheme.warning)
-                                .frame(width: 22)
-                            Text(def.displayName)
-                                .font(.system(size: 15))
-                                .foregroundColor(ApocalypseTheme.textPrimary)
-                            Spacer()
-                            Text("×\(loot.quantity)")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(ApocalypseTheme.warning)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 13)
-
-                        if idx < result.lootedItems.count - 1 {
-                            Rectangle()
-                                .fill(Color.white.opacity(0.06))
-                                .frame(height: 1)
-                                .padding(.horizontal, 16)
-                        }
-                    }
-                }
-            }
-            .background(ApocalypseTheme.cardBackground)
-            .cornerRadius(14)
-        }
-    }
-
-    // 探索统计
-    private var statsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("本次统计")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundColor(ApocalypseTheme.textPrimary)
-
-            HStack(spacing: 12) {
-                statCard(icon: "figure.walk",
-                         value: "\(result.walkDistanceM)m",
-                         label: "行走距离",
-                         color: ApocalypseTheme.info)
-                statCard(icon: "map.fill",
-                         value: "\(result.exploredAreaM2 / 10000)万m²",
-                         label: "探索面积",
-                         color: ApocalypseTheme.success)
-            }
-        }
-    }
-
-    private func statCard(icon: String, value: String, label: String, color: Color) -> some View {
-        VStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 20))
-                .foregroundColor(color)
-            Text(value)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(ApocalypseTheme.textPrimary)
-            Text(label)
-                .font(.caption)
-                .foregroundColor(ApocalypseTheme.textSecondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(ApocalypseTheme.cardBackground)
-        .cornerRadius(14)
     }
 }
 
