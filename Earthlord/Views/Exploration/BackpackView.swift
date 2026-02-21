@@ -252,17 +252,49 @@ struct BackpackView: View {
 
     // MARK: - 空状态
 
+    @ViewBuilder
     private var emptyState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "bag.slash")
-                .font(.system(size: 44))
+        if !searchText.isEmpty {
+            // 搜索无结果
+            stateView(
+                icon: "magnifyingglass",
+                title: "没有找到相关物品",
+                subtitle: "换个关键词试试"
+            )
+        } else if MockInventoryData.items.isEmpty {
+            // 背包真的是空的
+            stateView(
+                icon: "backpack",
+                title: "背包空空如也",
+                subtitle: "去探索收集物资吧"
+            )
+        } else {
+            // 分类筛选后无物品
+            stateView(
+                icon: "square.slash",
+                title: "该分类暂无物品",
+                subtitle: "换个分类看看"
+            )
+        }
+    }
+
+    private func stateView(icon: String, title: String, subtitle: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.system(size: 60))
                 .foregroundColor(ApocalypseTheme.textMuted)
-            Text(searchText.isEmpty ? "该分类暂无物品" : "未找到「\(searchText)」")
-                .font(.subheadline)
+            Text(title)
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(ApocalypseTheme.textSecondary)
+                .multilineTextAlignment(.center)
+            Text(subtitle)
+                .font(.system(size: 13))
+                .foregroundColor(ApocalypseTheme.textMuted)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 60)
+        .frame(minHeight: UIScreen.main.bounds.height * 0.45)
+        .padding(.horizontal, 40)
     }
 }
 

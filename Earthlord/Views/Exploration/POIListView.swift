@@ -218,17 +218,43 @@ struct POIListView: View {
     }
 
     // MARK: - 空状态
+
+    @ViewBuilder
     private var emptyState: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "mappin.slash")
-                .font(.system(size: 44))
+        if selectedCategory == "全部" {
+            // 全局无 POI 数据（尚未搜索或周围真的没有）
+            stateView(
+                icon: "map",
+                title: "附近暂无兴趣点",
+                subtitle: "点击搜索按钮发现周围的废墟"
+            )
+        } else {
+            // 当前分类筛选后没有结果
+            stateView(
+                icon: "mappin.slash",
+                title: "没有找到该类型的地点",
+                subtitle: "换个分类试试看"
+            )
+        }
+    }
+
+    private func stateView(icon: String, title: String, subtitle: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: icon)
+                .font(.system(size: 60))
                 .foregroundColor(ApocalypseTheme.textMuted)
-            Text("该分类暂无地点")
-                .font(.subheadline)
+            Text(title)
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(ApocalypseTheme.textSecondary)
+                .multilineTextAlignment(.center)
+            Text(subtitle)
+                .font(.system(size: 13))
+                .foregroundColor(ApocalypseTheme.textMuted)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 60)
+        .frame(minHeight: UIScreen.main.bounds.height * 0.45)
+        .padding(.horizontal, 40)
     }
 
     // MARK: - 搜索逻辑（1.5 秒模拟）

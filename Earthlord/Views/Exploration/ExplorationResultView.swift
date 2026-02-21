@@ -10,8 +10,12 @@ import SwiftUI
 
 struct ExplorationResultView: View {
     let result: ExplorationResult
+    /// 若不为 nil，则显示失败状态（正常探索时传 nil）
+    var errorMessage: String? = nil
 
     @Environment(\.dismiss) private var dismiss
+
+    private var isError: Bool { errorMessage != nil }
 
     // 控制入场动画
     @State private var headerVisible  = false
@@ -26,15 +30,19 @@ struct ExplorationResultView: View {
         ZStack {
             ApocalypseTheme.background.ignoresSafeArea()
 
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 20) {
-                    achievementHeader
-                    statsCard
-                    lootCard
-                    confirmButton
+            if isError {
+                errorStateView
+            } else {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 20) {
+                        achievementHeader
+                        statsCard
+                        lootCard
+                        confirmButton
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 24)
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 24)
             }
         }
         .onAppear { triggerAnimations() }
@@ -333,6 +341,50 @@ struct ExplorationResultView: View {
         .padding(.bottom, 8)
     }
 
+    // MARK: - 错误状态
+
+    private var errorStateView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            // 图标
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 60))
+                .foregroundColor(ApocalypseTheme.danger)
+
+            // 文案
+            VStack(spacing: 10) {
+                Text("探索失败")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(ApocalypseTheme.textPrimary)
+
+                Text(errorMessage ?? "发生未知错误，请稍后重试")
+                    .font(.system(size: 14))
+                    .foregroundColor(ApocalypseTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+            }
+            .padding(.horizontal, 40)
+
+            Spacer()
+
+            // 重试按钮（关闭弹窗，让用户重新触发探索）
+            Button(action: { dismiss() }) {
+                Text("返回重试")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+                    .background(ApocalypseTheme.danger)
+                    .cornerRadius(14)
+                    .shadow(color: ApocalypseTheme.danger.opacity(0.4), radius: 8, x: 0, y: 4)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     // MARK: - 格式化工具
 
     private func formatDistance(_ meters: Int) -> String {
@@ -352,6 +404,7 @@ struct ExplorationResultView: View {
     // MARK: - 入场动画（分三段顺序播放）
 
     private func triggerAnimations() {
+        guard !isError else { return }   // 失败状态无需播放入场动画
         withAnimation(.spring(response: 0.55, dampingFraction: 0.7)) {
             headerVisible = true
         }
