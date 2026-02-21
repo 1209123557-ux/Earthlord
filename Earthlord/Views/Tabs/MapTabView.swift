@@ -27,6 +27,10 @@ struct MapTabView: View {
     @State private var showCollisionWarning = false
     @State private var collisionWarningLevel: WarningLevel = .safe
 
+    // MARK: - 探索状态
+    @State private var isExploring = false
+    @State private var showExplorationResult = false
+
     // MARK: - Computed
     private var hasValidationResult: Bool {
         locationManager.territoryValidationPassed || locationManager.territoryValidationError != nil
@@ -63,6 +67,9 @@ struct MapTabView: View {
                 locationManager.startUpdatingLocation()
             }
             Task { await loadTerritories() }
+        }
+        .sheet(isPresented: $showExplorationResult) {
+            ExplorationResultView(result: MockExplorationResult.sample)
         }
     }
 
@@ -124,12 +131,15 @@ struct MapTabView: View {
                 .padding(.bottom, 40)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             } else {
-                HStack(spacing: 12) {
-                    Spacer()
+                // 三个按钮：左侧圈地 / 中间定位 / 右侧探索
+                HStack(spacing: 0) {
                     claimTerritoryButton
+                    Spacer()
                     recenterButton
+                    Spacer()
+                    exploreButton
                 }
-                .padding(.trailing, 20)
+                .padding(.horizontal, 20)
                 .padding(.bottom, 40)
             }
         }
@@ -265,6 +275,41 @@ struct MapTabView: View {
                 .background(ApocalypseTheme.primary)
                 .cornerRadius(25)
                 .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+        }
+    }
+
+    // MARK: - Explore Button
+    private var exploreButton: some View {
+        Button(action: startExploring) {
+            HStack(spacing: 8) {
+                if isExploring {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.75)
+                } else {
+                    Image(systemName: "binoculars.fill")
+                        .font(.system(size: 16))
+                }
+                Text(isExploring ? "探索中..." : "探索")
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(isExploring
+                ? ApocalypseTheme.primary.opacity(0.55)
+                : ApocalypseTheme.primary)
+            .cornerRadius(25)
+            .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+        }
+        .disabled(isExploring)
+    }
+
+    private func startExploring() {
+        isExploring = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            isExploring = false
+            showExplorationResult = true
         }
     }
 
