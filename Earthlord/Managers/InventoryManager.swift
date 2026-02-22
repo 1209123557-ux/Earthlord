@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import Combine
 import Supabase
 
 @MainActor
@@ -66,13 +67,8 @@ final class InventoryManager: ObservableObject {
 
         // 调用 upsert_inventory_item RPC：有则 +N，没有则新建
         for entry in list {
-            struct RPCParams: Encodable {
-                let p_user_id:  String
-                let p_item_id:  String
-                let p_quantity: Int
-            }
             try await supabase
-                .rpc("upsert_inventory_item", params: RPCParams(
+                .rpc("upsert_inventory_item", params: UpsertInventoryParams(
                     p_user_id:  userId.uuidString.lowercased(),
                     p_item_id:  entry.itemId,
                     p_quantity: entry.quantity
@@ -90,6 +86,14 @@ final class InventoryManager: ObservableObject {
         case notAuthenticated
         var errorDescription: String? { "请先登录后再操作背包" }
     }
+}
+
+// MARK: - RPC Params（文件级声明，避免 @MainActor 隔离与 Encodable 冲突）
+
+private struct UpsertInventoryParams: Encodable {
+    let p_user_id:  String
+    let p_item_id:  String
+    let p_quantity: Int
 }
 
 // MARK: - Supabase Row Codable
