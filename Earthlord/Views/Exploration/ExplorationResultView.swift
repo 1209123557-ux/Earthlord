@@ -24,7 +24,6 @@ struct ExplorationResultView: View {
 
     // 数字递增动画
     @State private var countedWalk = 0
-    @State private var countedArea = 0
 
     var body: some View {
         ZStack {
@@ -109,15 +108,8 @@ struct ExplorationResultView: View {
                     rank: result.walkRank
                 )
                 statDivider
-                // 探索面积
-                statGroup(
-                    icon: "map.fill",
-                    iconColor: ApocalypseTheme.success,
-                    title: "探索面积",
-                    current: formatArea(countedArea),              // 动态递增
-                    cumulative: formatArea(result.totalExploredAreaM2),
-                    rank: result.areaRank
-                )
+                // 奖励等级
+                rewardTierRow
                 statDivider
                 // 探索时长（无排名）
                 durationRow
@@ -190,7 +182,7 @@ struct ExplorationResultView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(ApocalypseTheme.textSecondary)
             Spacer()
-            Text("\(result.durationMinutes) 分钟")
+            Text(formatDuration(result.durationSeconds))
                 .font(.system(size: 16, weight: .bold))
                 .foregroundColor(ApocalypseTheme.textPrimary)
         }
@@ -201,6 +193,33 @@ struct ExplorationResultView: View {
         Rectangle()
             .fill(Color.white.opacity(0.06))
             .frame(height: 1)
+    }
+
+    /// 奖励等级行（替代已删除的"探索面积"）
+    private var rewardTierRow: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(ApocalypseTheme.warning)
+                Text("奖励等级")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(ApocalypseTheme.textSecondary)
+                Spacer()
+            }
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(result.rewardTier.displayName)
+                        .font(.system(size: 22, weight: .black))
+                        .foregroundColor(ApocalypseTheme.warning)
+                    Text(result.rewardTier.distanceDescription)
+                        .font(.system(size: 12))
+                        .foregroundColor(ApocalypseTheme.textMuted)
+                }
+                Spacer()
+            }
+        }
+        .padding(.vertical, 14)
     }
 
     // MARK: - 奖励物品卡片
@@ -394,11 +413,8 @@ struct ExplorationResultView: View {
         return "\(meters) m"
     }
 
-    private func formatArea(_ m2: Int) -> String {
-        if m2 >= 10_000 {
-            return String(format: "%.0f 万m²", Double(m2) / 10_000)
-        }
-        return "\(m2) m²"
+    private func formatDuration(_ seconds: Int) -> String {
+        String(format: "%02d:%02d", seconds / 60, seconds % 60)
     }
 
     // MARK: - 入场动画（分三段顺序播放）
@@ -422,24 +438,21 @@ struct ExplorationResultView: View {
 
     /// 数字递增动画：24 帧 ease-out，约 0.7 秒完成
     private func startCounting() {
-        let steps    = 24
-        let duration = 0.7
-        let interval = duration / Double(steps)
+        let steps      = 24
+        let duration   = 0.7
+        let interval   = duration / Double(steps)
         let targetWalk = result.walkDistanceM
-        let targetArea = result.exploredAreaM2
 
         for i in 1...steps {
-            let t      = Double(i) / Double(steps)
-            let eased  = 1 - pow(1 - t, 3)   // cubic ease-out
+            let t     = Double(i) / Double(steps)
+            let eased = 1 - pow(1 - t, 3)   // cubic ease-out
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * interval) {
                 countedWalk = Int(Double(targetWalk) * eased)
-                countedArea = Int(Double(targetArea) * eased)
             }
         }
         // 保证最终值精确
         DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.05) {
             countedWalk = targetWalk
-            countedArea = targetArea
         }
     }
 }

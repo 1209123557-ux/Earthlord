@@ -36,12 +36,9 @@ private func rarityStyle(for rarity: ItemRarity) -> (label: String, color: Color
 struct BackpackView: View {
 
     // MARK: - 状态
+    @EnvironmentObject private var inventoryManager: InventoryManager
     @State private var searchText = ""
     @State private var selectedCategory = "全部"
-
-    // MARK: - Mock 容量（真实接入后改为从背包模型读取）
-    private let mockMax     = 100
-    private let mockCurrent = 64
 
     // MARK: - 筛选分类（标签 + 图标）
     private let filterCategories: [(label: String, icon: String)] = [
@@ -55,7 +52,7 @@ struct BackpackView: View {
 
     // MARK: - 筛选后的物品列表
     private var filteredItems: [InventoryItem] {
-        MockInventoryData.items.filter { item in
+        inventoryManager.items.filter { item in
             let def = MockItemDefinitions.find(item.itemId)
 
             // 分类筛选：全部 = 不过滤
@@ -72,7 +69,8 @@ struct BackpackView: View {
 
     // MARK: - 容量相关
     private var capacityPercent: Double {
-        Double(mockCurrent) / Double(mockMax)
+        guard inventoryManager.maxCapacity > 0 else { return 0 }
+        return Double(inventoryManager.totalCount) / Double(inventoryManager.maxCapacity)
     }
 
     private var capacityBarColor: Color {
@@ -97,6 +95,9 @@ struct BackpackView: View {
         .navigationTitle("背包")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .onAppear {
+            Task { await inventoryManager.fetchInventory() }
+        }
     }
 
     // MARK: - 容量状态卡
@@ -110,7 +111,7 @@ struct BackpackView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(ApocalypseTheme.textSecondary)
                     Spacer()
-                    Text("\(mockCurrent) / \(mockMax)")
+                    Text("\(inventoryManager.totalCount) / \(inventoryManager.maxCapacity)")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundColor(capacityBarColor)
                 }
@@ -229,24 +230,31 @@ struct BackpackView: View {
 
     private var itemScrollList: some View {
         ScrollView {
-            LazyVStack(spacing: 10) {
-                if filteredItems.isEmpty {
-                    emptyState
-                        .transition(.opacity)
-                } else {
-                    ForEach(filteredItems) { item in
-                        BackpackItemRow(item: item)
-                            .transition(.asymmetric(
-                                insertion: .opacity.combined(with: .move(edge: .bottom)),
-                                removal:   .opacity
-                            ))
+            if inventoryManager.isLoading && inventoryManager.items.isEmpty {
+                ProgressView()
+                    .tint(ApocalypseTheme.primary)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: UIScreen.main.bounds.height * 0.4)
+            } else {
+                LazyVStack(spacing: 10) {
+                    if filteredItems.isEmpty {
+                        emptyState
+                            .transition(.opacity)
+                    } else {
+                        ForEach(filteredItems) { item in
+                            BackpackItemRow(item: item)
+                                .transition(.asymmetric(
+                                    insertion: .opacity.combined(with: .move(edge: .bottom)),
+                                    removal:   .opacity
+                                ))
+                        }
                     }
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
+                // 整体动画：分类切换时平滑过渡
+                .animation(.easeInOut(duration: 0.22), value: selectedCategory)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 24)
-            // 整体动画：分类切换时平滑过渡
-            .animation(.easeInOut(duration: 0.22), value: selectedCategory)
         }
     }
 
@@ -261,7 +269,7 @@ struct BackpackView: View {
                 title: "没有找到相关物品",
                 subtitle: "换个关键词试试"
             )
-        } else if MockInventoryData.items.isEmpty {
+        } else if inventoryManager.items.isEmpty {
             // 背包真的是空的
             stateView(
                 icon: "backpack",
@@ -413,4 +421,5 @@ private struct BackpackItemRow: View {
     NavigationStack {
         BackpackView()
     }
+    .environmentObject(InventoryManager.shared)
 }

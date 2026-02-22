@@ -11,6 +11,8 @@ struct MainTabView: View {
     @State private var selectedTab = 0
     // ⭐ 提升到 MainTabView 层级，所有 Tab 共享同一个实例
     @StateObject private var locationManager = LocationManager()
+    // 背包数据：使用单例，MapTabView.stopExploring() 写入后此处自动刷新
+    private let inventoryManager = InventoryManager.shared
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -52,6 +54,7 @@ struct MainTabView: View {
         .tint(ApocalypseTheme.primary)
         // 注入到所有子视图
         .environmentObject(locationManager)
+        .environmentObject(inventoryManager)
     }
 }
 

@@ -124,66 +124,100 @@ enum MockItemDefinitions {
 
     static let table: [ItemDefinition] = [
 
-        // 水类
+        // ── 水类 ──────────────────────────────────────────
         ItemDefinition(id: "item_water_bottle",
                        displayName: "矿泉水",
                        category: .water,
-                       weightKg: 0.5,
-                       volumeL: 0.5,
+                       weightKg: 0.5, volumeL: 0.5,
                        rarity: .common),
 
-        // 食物
+        // ── 食物 ──────────────────────────────────────────
         ItemDefinition(id: "item_canned_food",
                        displayName: "罐头食品",
                        category: .food,
-                       weightKg: 0.4,
-                       volumeL: 0.3,
+                       weightKg: 0.4, volumeL: 0.3,
                        rarity: .common),
 
-        // 医疗
+        ItemDefinition(id: "item_biscuit",
+                       displayName: "饼干",
+                       category: .food,
+                       weightKg: 0.2, volumeL: 0.2,
+                       rarity: .common),
+
+        // ── 医疗 ──────────────────────────────────────────
         ItemDefinition(id: "item_bandage",
                        displayName: "绷带",
                        category: .medical,
-                       weightKg: 0.1,
-                       volumeL: 0.1,
+                       weightKg: 0.1, volumeL: 0.1,
                        rarity: .common),
 
         ItemDefinition(id: "item_medicine",
                        displayName: "药品",
                        category: .medical,
-                       weightKg: 0.2,
-                       volumeL: 0.1,
+                       weightKg: 0.2, volumeL: 0.1,
                        rarity: .uncommon),
 
-        // 材料
+        ItemDefinition(id: "item_first_aid",
+                       displayName: "急救包",
+                       category: .medical,
+                       weightKg: 0.5, volumeL: 0.5,
+                       rarity: .uncommon),
+
+        ItemDefinition(id: "item_antibiotic",
+                       displayName: "抗生素",
+                       category: .medical,
+                       weightKg: 0.1, volumeL: 0.05,
+                       rarity: .rare),
+
+        // ── 材料 ──────────────────────────────────────────
         ItemDefinition(id: "item_wood",
                        displayName: "木材",
                        category: .material,
-                       weightKg: 2.0,
-                       volumeL: 3.0,
+                       weightKg: 2.0, volumeL: 3.0,
                        rarity: .common),
 
         ItemDefinition(id: "item_scrap_metal",
                        displayName: "废金属",
                        category: .material,
-                       weightKg: 3.0,
-                       volumeL: 1.5,
+                       weightKg: 3.0, volumeL: 1.5,
                        rarity: .common),
 
-        // 工具
+        ItemDefinition(id: "item_generator_part",
+                       displayName: "发电机零件",
+                       category: .material,
+                       weightKg: 4.0, volumeL: 2.0,
+                       rarity: .rare),
+
+        // ── 工具 ──────────────────────────────────────────
         ItemDefinition(id: "item_flashlight",
                        displayName: "手电筒",
                        category: .tool,
-                       weightKg: 0.3,
-                       volumeL: 0.2,
+                       weightKg: 0.3, volumeL: 0.2,
                        rarity: .uncommon),
 
         ItemDefinition(id: "item_rope",
                        displayName: "绳子",
                        category: .tool,
-                       weightKg: 0.5,
-                       volumeL: 0.4,
+                       weightKg: 0.5, volumeL: 0.4,
                        rarity: .common),
+
+        ItemDefinition(id: "item_match",
+                       displayName: "火柴",
+                       category: .tool,
+                       weightKg: 0.05, volumeL: 0.05,
+                       rarity: .common),
+
+        ItemDefinition(id: "item_tool_kit",
+                       displayName: "工具箱",
+                       category: .tool,
+                       weightKg: 2.0, volumeL: 2.5,
+                       rarity: .uncommon),
+
+        ItemDefinition(id: "item_gas_mask",
+                       displayName: "防毒面具",
+                       category: .tool,
+                       weightKg: 1.2, volumeL: 1.5,
+                       rarity: .rare),
     ]
 
     /// 按 ID 快速查找物品定义
@@ -253,25 +287,23 @@ enum MockInventoryData {
 
 // MARK: - 探索结果
 
-/// 单次探索结果数据
+/// 单次探索结果数据（由 ExplorationManager + RewardGenerator 生成真实数据）
 struct ExplorationResult {
     // 行走距离
-    let walkDistanceM: Int          // 本次行走距离（米）
-    let totalWalkDistanceM: Int     // 累计行走距离（米）
-    let walkRank: Int               // 行走距离全服排名
+    let walkDistanceM:      Int          // 本次行走距离（米）
+    let totalWalkDistanceM: Int          // 累计行走距离（米，历史总和）
+    let walkRank:           Int          // 行走距离全服排名（暂为占位）
 
-    // 探索面积
-    let exploredAreaM2: Int         // 本次探索面积（平方米）
-    let totalExploredAreaM2: Int    // 累计探索面积（平方米）
-    let areaRank: Int               // 探索面积全服排名
+    // 奖励等级（由距离计算）
+    let rewardTier: RewardTier
 
-    // 探索时长
-    let durationMinutes: Int        // 本次探索时长（分钟）
+    // 探索时长（秒，UI 格式化为 MM:SS）
+    let durationSeconds: Int
 
     // 获得物品列表（itemId → 数量）
     let lootedItems: [(itemId: String, quantity: Int)]
 
-    /// 获得物品的可读字符串（如"木材×5、矿泉水×3"）
+    /// 获得物品的可读字符串（如"绷带×2、矿泉水×1"）
     var lootSummary: String {
         lootedItems.compactMap { loot in
             guard let def = MockItemDefinitions.find(loot.itemId) else { return nil }
@@ -280,28 +312,18 @@ struct ExplorationResult {
     }
 }
 
-/// 测试用探索结果示例
+/// 预览用示例数据（UI Preview 专用）
 enum MockExplorationResult {
 
     static let sample = ExplorationResult(
-        // 行走距离：本次 2500m，累计 15000m，全服第 42 名
-        walkDistanceM:      2_500,
-        totalWalkDistanceM: 15_000,
-        walkRank:           42,
-
-        // 探索面积：本次 5 万㎡，累计 25 万㎡，全服第 38 名
-        exploredAreaM2:      50_000,
-        totalExploredAreaM2: 250_000,
-        areaRank:            38,
-
-        // 本次探索时长：30 分钟
-        durationMinutes: 30,
-
-        // 本次获得物品：木材×5、矿泉水×3、罐头×2
+        walkDistanceM:      750,
+        totalWalkDistanceM: 5_250,
+        walkRank:           88,
+        rewardTier:         .silver,
+        durationSeconds:    932,    // 15 分 32 秒
         lootedItems: [
-            (itemId: "item_wood",         quantity: 5),
-            (itemId: "item_water_bottle", quantity: 3),
-            (itemId: "item_canned_food",  quantity: 2),
+            (itemId: "item_bandage",      quantity: 1),
+            (itemId: "item_water_bottle", quantity: 1),
         ]
     )
 }

@@ -28,7 +28,9 @@ struct MapTabView: View {
     @State private var collisionWarningLevel: WarningLevel = .safe
 
     // MARK: - 探索状态
-    @State private var isExploring = false
+    @StateObject private var explorationManager = ExplorationManager()
+    @State private var explorationResult: ExplorationResult? = nil
+    @State private var isFinishingExploration = false
     @State private var showExplorationResult = false
 
     // MARK: - Computed
@@ -54,6 +56,13 @@ struct MapTabView: View {
             }
 
             if locationManager.isAuthorized {
+                // 探索中：顶部状态悬浮条
+                if explorationManager.isExploring {
+                    VStack {
+                        explorationStatusBanner
+                        Spacer()
+                    }
+                }
                 VStack {
                     Spacer()
                     bottomActionArea
@@ -69,7 +78,9 @@ struct MapTabView: View {
             Task { await loadTerritories() }
         }
         .sheet(isPresented: $showExplorationResult) {
-            ExplorationResultView(result: MockExplorationResult.sample)
+            if let result = explorationResult {
+                ExplorationResultView(result: result)
+            }
         }
     }
 
@@ -280,37 +291,147 @@ struct MapTabView: View {
 
     // MARK: - Explore Button
     private var exploreButton: some View {
-        Button(action: startExploring) {
+        Button(action: {
+            if explorationManager.isExploring {
+                stopExploring()
+            } else {
+                startExploring()
+            }
+        }) {
             HStack(spacing: 8) {
-                if isExploring {
+                if isFinishingExploration {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(0.75)
+                } else if explorationManager.isExploring {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 16))
                 } else {
                     Image(systemName: "binoculars.fill")
                         .font(.system(size: 16))
                 }
-                Text(isExploring ? "探索中..." : "探索")
+                Text(isFinishingExploration ? "结算中..." : explorationManager.isExploring ? "结束探索" : "探索")
                     .font(.system(size: 14, weight: .semibold))
             }
             .foregroundColor(.white)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(isExploring
-                ? ApocalypseTheme.primary.opacity(0.55)
-                : ApocalypseTheme.primary)
+            .background(
+                isFinishingExploration    ? ApocalypseTheme.primary.opacity(0.55) :
+                explorationManager.isExploring ? ApocalypseTheme.danger :
+                ApocalypseTheme.primary
+            )
             .cornerRadius(25)
             .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
         }
-        .disabled(isExploring)
+        .disabled(isFinishingExploration)
     }
 
     private func startExploring() {
-        isExploring = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            isExploring = false
-            showExplorationResult = true
+        explorationManager.startExploration()
+    }
+
+    private func stopExploring() {
+        let (distanceM, durationSec, startTime) = explorationManager.stopExploration()
+        isFinishingExploration = true
+
+        Task {
+            let rewards = RewardGenerator.generateRewards(distanceM: distanceM)
+            let tier    = RewardGenerator.calculateTier(distanceM: distanceM)
+
+            do {
+                try await saveExplorationSession(
+                    startTime:       startTime,
+                    endTime:         Date(),
+                    durationSeconds: durationSec,
+                    distanceM:       distanceM,
+                    tier:            tier,
+                    items:           rewards
+                )
+                if !rewards.isEmpty {
+                    try await InventoryManager.shared.addItems(rewards)
+                }
+            } catch {
+                print("[Explore] 保存失败: \(error.localizedDescription)")
+            }
+
+            let result = ExplorationResult(
+                walkDistanceM:      distanceM,
+                totalWalkDistanceM: distanceM,
+                walkRank:           0,
+                rewardTier:         tier,
+                durationSeconds:    durationSec,
+                lootedItems:        rewards
+            )
+            isFinishingExploration = false
+            explorationResult      = result
+            showExplorationResult  = true
         }
+    }
+
+    private func saveExplorationSession(
+        startTime:       Date,
+        endTime:         Date,
+        durationSeconds: Int,
+        distanceM:       Int,
+        tier:            RewardTier,
+        items:           [(itemId: String, quantity: Int)]
+    ) async throws {
+        guard let userId = AuthManager.shared.currentUser?.id else { return }
+
+        struct SessionRow: Encodable {
+            let user_id:          String
+            let start_time:       String
+            let end_time:         String
+            let duration_seconds: Int
+            let total_distance:   Double
+            let reward_tier:      String
+            let items_rewarded:   [ItemEntry]
+            let status:           String
+            struct ItemEntry: Encodable { let item_id: String; let quantity: Int }
+        }
+
+        let fmt = ISO8601DateFormatter()
+        try await supabase
+            .from("exploration_sessions")
+            .insert(SessionRow(
+                user_id:          userId.uuidString.lowercased(),
+                start_time:       fmt.string(from: startTime),
+                end_time:         fmt.string(from: endTime),
+                duration_seconds: durationSeconds,
+                total_distance:   Double(distanceM),
+                reward_tier:      tier.rawValue,
+                items_rewarded:   items.map { .init(item_id: $0.itemId, quantity: $0.quantity) },
+                status:           "completed"
+            ))
+            .execute()
+    }
+
+    // MARK: - 探索状态悬浮条
+
+    private var explorationStatusBanner: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(ApocalypseTheme.danger)
+                .frame(width: 8, height: 8)
+            Text("已行走 \(Int(explorationManager.totalDistanceM)) m · \(formatExpDuration(explorationManager.durationSeconds))")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(ApocalypseTheme.textPrimary)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial)
+        .cornerRadius(20)
+        .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+        .padding(.horizontal, 20)
+        .padding(.top, 60)
+        .transition(.move(edge: .top).combined(with: .opacity))
+        .animation(.easeInOut(duration: 0.3), value: explorationManager.isExploring)
+    }
+
+    private func formatExpDuration(_ seconds: Int) -> String {
+        String(format: "%02d:%02d", seconds / 60, seconds % 60)
     }
 
     // MARK: - Day 19: 带碰撞检测的开始圈地
