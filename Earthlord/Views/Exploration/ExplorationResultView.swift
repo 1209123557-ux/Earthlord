@@ -98,20 +98,13 @@ struct ExplorationResultView: View {
     private var statsCard: some View {
         ELCard(padding: EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16)) {
             VStack(spacing: 0) {
-                // 行走距离
-                statGroup(
-                    icon: "figure.walk",
-                    iconColor: ApocalypseTheme.info,
-                    title: "行走距离",
-                    current: formatDistance(countedWalk),          // 动态递增
-                    cumulative: formatDistance(result.totalWalkDistanceM),
-                    rank: result.walkRank
-                )
+                // 行走距离（动态递增）
+                distanceRow
                 statDivider
                 // 奖励等级
                 rewardTierRow
                 statDivider
-                // 探索时长（无排名）
+                // 探索时长
                 durationRow
             }
         }
@@ -119,57 +112,25 @@ struct ExplorationResultView: View {
         .offset(y: statsVisible ? 0 : 20)
     }
 
-    private func statGroup(
-        icon: String, iconColor: Color,
-        title: String,
-        current: String, cumulative: String,
-        rank: Int
-    ) -> some View {
+    private var distanceRow: some View {
         VStack(spacing: 10) {
-            // 标题行
             HStack(spacing: 6) {
-                Image(systemName: icon)
+                Image(systemName: "figure.walk")
                     .font(.system(size: 13))
-                    .foregroundColor(iconColor)
-                Text(title)
+                    .foregroundColor(ApocalypseTheme.info)
+                Text("行走距离")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(ApocalypseTheme.textSecondary)
                 Spacer()
-                // 排名（醒目绿色）
-                HStack(spacing: 2) {
-                    Text("全服第")
-                        .font(.system(size: 12))
-                        .foregroundColor(ApocalypseTheme.textMuted)
-                    Text("#\(rank)")
-                        .font(.system(size: 14, weight: .black))
-                        .foregroundColor(ApocalypseTheme.success)
-                }
             }
-
-            // 数值行：本次 vs 累计
-            HStack(spacing: 0) {
-                statValue(label: "本次", value: current, color: ApocalypseTheme.primary)
+            HStack {
+                Text(formatDistance(countedWalk))
+                    .font(.system(size: 26, weight: .bold))
+                    .foregroundColor(ApocalypseTheme.primary)
                 Spacer()
-                Rectangle()
-                    .fill(Color.white.opacity(0.1))
-                    .frame(width: 1, height: 36)
-                Spacer()
-                statValue(label: "累计", value: cumulative, color: ApocalypseTheme.textPrimary)
             }
         }
         .padding(.vertical, 14)
-    }
-
-    private func statValue(label: String, value: String, color: Color) -> some View {
-        VStack(spacing: 3) {
-            Text(value)
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(color)
-            Text(label)
-                .font(.system(size: 11))
-                .foregroundColor(ApocalypseTheme.textMuted)
-        }
-        .frame(maxWidth: .infinity)
     }
 
     /// 探索时长行（无排名，单独样式）

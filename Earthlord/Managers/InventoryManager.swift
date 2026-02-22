@@ -9,6 +9,7 @@
 import Foundation
 import Combine
 import Supabase
+import OSLog
 
 @MainActor
 final class InventoryManager: ObservableObject {
@@ -23,6 +24,8 @@ final class InventoryManager: ObservableObject {
 
     static let shared = InventoryManager()
 
+    private let logger = Logger(subsystem: "com.earthlord", category: "InventoryManager")
+
     // MARK: - 计算属性
 
     /// 背包中所有物品的总件数（用于容量显示）
@@ -32,6 +35,7 @@ final class InventoryManager: ObservableObject {
     // MARK: - Fetch
 
     func fetchInventory() async {
+        logger.info("[Inventory] 开始拉取背包数据")
         isLoading = true
         errorMessage = nil
         do {
@@ -51,7 +55,9 @@ final class InventoryManager: ObservableObject {
                     qualityPercent: nil
                 )
             }
+            logger.info("[Inventory] 拉取成功，共 \(rows.count) 条记录")
         } catch {
+            logger.error("[Inventory] 拉取失败: \(error.localizedDescription)")
             errorMessage = "加载背包失败：\(error.localizedDescription)"
         }
         isLoading = false
@@ -68,6 +74,8 @@ final class InventoryManager: ObservableObject {
             throw InventoryError.notAuthenticated
         }
 
+        logger.info("[Inventory] 开始写入 \(list.count) 种物品")
+
         // 调用 upsert_inventory_item RPC：有则 +N，没有则新建
         for entry in list {
             let params: [String: AnyJSON] = [
@@ -75,9 +83,15 @@ final class InventoryManager: ObservableObject {
                 "p_item_id":  .string(entry.itemId),
                 "p_quantity": .integer(entry.quantity)
             ]
-            try await supabase
-                .rpc("upsert_inventory_item", params: params)
-                .execute()
+            do {
+                try await supabase
+                    .rpc("upsert_inventory_item", params: params)
+                    .execute()
+                logger.info("[Inventory] 写入完成 itemId=\(entry.itemId) qty=\(entry.quantity)")
+            } catch {
+                logger.error("[Inventory] 写入失败 itemId=\(entry.itemId): \(error.localizedDescription)")
+                throw error
+            }
         }
 
         // 写完后刷新本地缓存

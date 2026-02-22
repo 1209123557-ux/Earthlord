@@ -9,6 +9,7 @@ import SwiftUI
 import MapKit
 import UIKit
 import Supabase
+import OSLog
 
 struct MapTabView: View {
     // MARK: - Environment
@@ -32,6 +33,9 @@ struct MapTabView: View {
     @State private var explorationResult: ExplorationResult? = nil
     @State private var isFinishingExploration = false
     @State private var showExplorationResult = false
+    @State private var explorationErrorMessage: String? = nil
+
+    private let mapLogger = Logger(subsystem: "com.earthlord", category: "MapTabView")
 
     // MARK: - Computed
     private var hasValidationResult: Bool {
@@ -77,10 +81,13 @@ struct MapTabView: View {
             }
             Task { await loadTerritories() }
         }
-        .sheet(isPresented: $showExplorationResult) {
+        .sheet(isPresented: $showExplorationResult, onDismiss: { explorationErrorMessage = nil }) {
             if let result = explorationResult {
-                ExplorationResultView(result: result)
+                ExplorationResultView(result: result, errorMessage: explorationErrorMessage)
             }
+        }
+        .onReceive(explorationManager.$explorationFailed) { failed in
+            if failed { handleExplorationFailed() }
         }
     }
 
@@ -328,16 +335,19 @@ struct MapTabView: View {
     }
 
     private func startExploring() {
+        mapLogger.info("[MapTabView] 用户点击开始探索")
         explorationManager.startExploration()
     }
 
     private func stopExploring() {
         let (distanceM, durationSec, startTime) = explorationManager.stopExploration()
+        mapLogger.info("[MapTabView] 用户点击结束探索 dist=\(distanceM)m dur=\(durationSec)s")
         isFinishingExploration = true
 
         Task {
             let rewards = RewardGenerator.generateRewards(distanceM: distanceM)
             let tier    = RewardGenerator.calculateTier(distanceM: distanceM)
+            mapLogger.info("[MapTabView] rewards=\(rewards.count) items tier=\(tier.rawValue)")
 
             do {
                 try await saveExplorationSession(
@@ -352,21 +362,33 @@ struct MapTabView: View {
                     try await InventoryManager.shared.addItems(rewards)
                 }
             } catch {
-                print("[Explore] 保存失败: \(error.localizedDescription)")
+                mapLogger.error("[MapTabView] 保存探索数据失败: \(error.localizedDescription)")
             }
 
             let result = ExplorationResult(
-                walkDistanceM:      distanceM,
-                totalWalkDistanceM: distanceM,
-                walkRank:           0,
-                rewardTier:         tier,
-                durationSeconds:    durationSec,
-                lootedItems:        rewards
+                walkDistanceM:   distanceM,
+                rewardTier:      tier,
+                durationSeconds: durationSec,
+                lootedItems:     rewards
             )
             isFinishingExploration = false
             explorationResult      = result
             showExplorationResult  = true
         }
+    }
+
+    private func handleExplorationFailed() {
+        mapLogger.error("[MapTabView] 探索被强制终止（超速）")
+        explorationManager.resetFailedState()
+        explorationErrorMessage = "行驶速度超过 30 km/h 达 10 秒，探索已自动终止。"
+        let dummy = ExplorationResult(
+            walkDistanceM:   Int(explorationManager.totalDistanceM),
+            rewardTier:      .none,
+            durationSeconds: explorationManager.durationSeconds,
+            lootedItems:     []
+        )
+        explorationResult     = dummy
+        showExplorationResult = true
     }
 
     private func saveExplorationSession(
@@ -410,17 +432,25 @@ struct MapTabView: View {
     // MARK: - 探索状态悬浮条
 
     private var explorationStatusBanner: some View {
-        HStack(spacing: 10) {
+        let isViolation = explorationManager.isSpeedViolation
+        return HStack(spacing: 10) {
             Circle()
-                .fill(ApocalypseTheme.danger)
+                .fill(isViolation ? Color.yellow : ApocalypseTheme.danger)
                 .frame(width: 8, height: 8)
-            Text("已行走 \(Int(explorationManager.totalDistanceM)) m · \(formatExpDuration(explorationManager.durationSeconds))")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(ApocalypseTheme.textPrimary)
+            if isViolation {
+                Text("速度过快！\(explorationManager.speedViolationCountdown)s 后终止探索")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.yellow)
+            } else {
+                Text("已行走 \(Int(explorationManager.totalDistanceM)) m · \(formatExpDuration(explorationManager.durationSeconds))")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(ApocalypseTheme.textPrimary)
+            }
             Spacer()
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+        .background(isViolation ? Color.yellow.opacity(0.18) : Color.clear)
         .background(.ultraThinMaterial)
         .cornerRadius(20)
         .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
@@ -428,6 +458,7 @@ struct MapTabView: View {
         .padding(.top, 60)
         .transition(.move(edge: .top).combined(with: .opacity))
         .animation(.easeInOut(duration: 0.3), value: explorationManager.isExploring)
+        .animation(.easeInOut(duration: 0.2), value: isViolation)
     }
 
     private func formatExpDuration(_ seconds: Int) -> String {

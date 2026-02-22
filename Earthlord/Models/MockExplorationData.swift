@@ -289,10 +289,8 @@ enum MockInventoryData {
 
 /// 单次探索结果数据（由 ExplorationManager + RewardGenerator 生成真实数据）
 struct ExplorationResult {
-    // 行走距离
-    let walkDistanceM:      Int          // 本次行走距离（米）
-    let totalWalkDistanceM: Int          // 累计行走距离（米，历史总和）
-    let walkRank:           Int          // 行走距离全服排名（暂为占位）
+    // 行走距离（本次）
+    let walkDistanceM:   Int
 
     // 奖励等级（由距离计算）
     let rewardTier: RewardTier
@@ -316,11 +314,9 @@ struct ExplorationResult {
 enum MockExplorationResult {
 
     static let sample = ExplorationResult(
-        walkDistanceM:      750,
-        totalWalkDistanceM: 5_250,
-        walkRank:           88,
-        rewardTier:         .silver,
-        durationSeconds:    932,    // 15 分 32 秒
+        walkDistanceM:   750,
+        rewardTier:      .silver,
+        durationSeconds: 932,    // 15 分 32 秒
         lootedItems: [
             (itemId: "item_bandage",      quantity: 1),
             (itemId: "item_water_bottle", quantity: 1),
