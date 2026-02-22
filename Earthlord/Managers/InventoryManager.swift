@@ -90,7 +90,7 @@ final class InventoryManager: ObservableObject {
 
 // MARK: - RPC Params（文件级声明，避免 @MainActor 隔离与 Encodable 冲突）
 
-private struct UpsertInventoryParams: Encodable {
+private struct UpsertInventoryParams: Encodable, Sendable {
     let p_user_id:  String
     let p_item_id:  String
     let p_quantity: Int
