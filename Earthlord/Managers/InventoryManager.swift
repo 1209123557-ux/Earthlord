@@ -58,10 +58,15 @@ final class InventoryManager: ObservableObject {
     }
 
     // MARK: - Add Items（调用 RPC 累加数量，防止覆盖已有物品）
+    // nonisolated：让函数体脱离 @MainActor，使 UpsertInventoryParams 的
+    // Encodable 协议实现不被推断为主 actor 隔离，满足 Supabase rpc 的 Sendable 要求。
 
-    func addItems(_ list: [(itemId: String, quantity: Int)]) async throws {
+    nonisolated func addItems(_ list: [(itemId: String, quantity: Int)]) async throws {
         guard !list.isEmpty else { return }
-        guard let userId = AuthManager.shared.currentUser?.id else {
+
+        // 在非隔离上下文中安全地读取主 actor 上的 currentUser
+        let userId = await MainActor.run { AuthManager.shared.currentUser?.id }
+        guard let userId else {
             throw InventoryError.notAuthenticated
         }
 
@@ -76,7 +81,7 @@ final class InventoryManager: ObservableObject {
                 .execute()
         }
 
-        // 写完后刷新本地缓存
+        // 写完后回到主 actor 刷新本地缓存
         await fetchInventory()
     }
 
