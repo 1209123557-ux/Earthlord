@@ -88,16 +88,6 @@ final class InventoryManager: ObservableObject {
     }
 }
 
-// MARK: - RPC Params
-// internal（非 private）避免 Swift 将其推断为 @MainActor 隔离，
-// 从而让 Encodable 协议实现满足 Supabase rpc 的 Sendable 要求。
-
-struct UpsertInventoryParams: Encodable, Sendable {
-    let p_user_id:  String
-    let p_item_id:  String
-    let p_quantity: Int
-}
-
 // MARK: - Supabase Row Codable
 
 private struct InventoryRow: Decodable {
