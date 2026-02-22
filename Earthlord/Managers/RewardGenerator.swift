@@ -99,11 +99,22 @@ enum RewardGenerator {
 
     static func calculateTier(distanceM: Int) -> RewardTier {
         switch distanceM {
-        case ..<200:   return .none
-        case 200..<500:  return .bronze
-        case 500..<1000: return .silver
+        case ..<200:      return .none
+        case 200..<500:   return .bronze
+        case 500..<1000:  return .silver
         case 1000..<2000: return .gold
-        default:         return .diamond
+        default:          return .diamond
+        }
+    }
+
+    /// 返回下一奖励等级的名称及还差多少米，已是最高级时返回 nil
+    static func nextTierInfo(distanceM: Int) -> (tierName: String, remaining: Int)? {
+        switch distanceM {
+        case ..<200:      return ("铜级", 200  - distanceM)
+        case 200..<500:   return ("银级", 500  - distanceM)
+        case 500..<1000:  return ("金级", 1000 - distanceM)
+        case 1000..<2000: return ("钻石级", 2000 - distanceM)
+        default:          return nil
         }
     }
 

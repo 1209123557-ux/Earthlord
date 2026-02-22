@@ -429,31 +429,110 @@ struct MapTabView: View {
             .execute()
     }
 
-    // MARK: - 探索状态悬浮条
+    // MARK: - 探索状态悬浮卡片
 
     private var explorationStatusBanner: some View {
         let isViolation = explorationManager.isSpeedViolation
-        return HStack(spacing: 10) {
-            Circle()
-                .fill(isViolation ? Color.yellow : ApocalypseTheme.danger)
-                .frame(width: 8, height: 8)
-            if isViolation {
-                Text("速度过快！\(explorationManager.speedViolationCountdown)s 后终止探索")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.yellow)
-            } else {
-                Text("已行走 \(Int(explorationManager.totalDistanceM)) m · \(formatExpDuration(explorationManager.durationSeconds))")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(ApocalypseTheme.textPrimary)
+        let distM       = Int(explorationManager.totalDistanceM)
+        let currentTier = RewardGenerator.calculateTier(distanceM: distM)
+        let nextTier    = RewardGenerator.nextTierInfo(distanceM: distM)
+        let bannerColor: Color = isViolation ? .orange : ApocalypseTheme.success
+
+        return VStack(spacing: 0) {
+
+            // ── 上排：距离 | 时长 | GPS点数 + 结束按钮 ──
+            HStack(spacing: 0) {
+                // 距离
+                HStack(spacing: 4) {
+                    Image(systemName: "figure.walk").font(.system(size: 13))
+                    Text("\(distM) m").font(.system(size: 14, weight: .bold))
+                }
+                // 分隔
+                Rectangle()
+                    .fill(Color.white.opacity(0.35))
+                    .frame(width: 1, height: 14)
+                    .padding(.horizontal, 10)
+                // 时长
+                HStack(spacing: 4) {
+                    Image(systemName: "clock").font(.system(size: 13))
+                    Text(formatExpDuration(explorationManager.durationSeconds))
+                        .font(.system(size: 14, weight: .bold))
+                }
+                // 分隔
+                Rectangle()
+                    .fill(Color.white.opacity(0.35))
+                    .frame(width: 1, height: 14)
+                    .padding(.horizontal, 10)
+                // GPS 点数
+                HStack(spacing: 4) {
+                    Image(systemName: "location.circle").font(.system(size: 13))
+                    Text("\(explorationManager.locationCount)")
+                        .font(.system(size: 14, weight: .bold))
+                }
+                Spacer()
+                // 结束按钮
+                Button(action: {
+                    if explorationManager.isExploring { stopExploring() }
+                }) {
+                    HStack(spacing: 4) {
+                        if isFinishingExploration {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(0.7)
+                        } else {
+                            Image(systemName: "stop.fill").font(.system(size: 11))
+                        }
+                        Text(isFinishingExploration ? "结算中" : "结束")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(ApocalypseTheme.danger)
+                    .cornerRadius(16)
+                }
+                .disabled(isFinishingExploration)
             }
-            Spacer()
+            .foregroundColor(.white)
+
+            // ── 分隔线 ──
+            Rectangle()
+                .fill(Color.white.opacity(0.2))
+                .frame(height: 1)
+                .padding(.top, 10)
+                .padding(.bottom, 8)
+
+            // ── 下排：奖励等级 + 进度提示 ──
+            HStack(spacing: 6) {
+                if isViolation {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 13))
+                        .foregroundColor(.yellow)
+                    Text("速度过快！\(explorationManager.speedViolationCountdown)s 后终止探索")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.yellow)
+                } else {
+                    Text(currentTier.displayName)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.white)
+                    if let next = nextTier {
+                        Text("距\(next.tierName)还差 \(next.remaining) m")
+                            .font(.system(size: 13))
+                            .foregroundColor(.white.opacity(0.85))
+                    } else {
+                        Text("已达最高奖励等级 🎉")
+                            .font(.system(size: 13))
+                            .foregroundColor(.white.opacity(0.85))
+                    }
+                }
+                Spacer()
+            }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(isViolation ? Color.yellow.opacity(0.18) : Color.clear)
-        .background(.ultraThinMaterial)
+        .padding(.vertical, 12)
+        .background(bannerColor.opacity(0.92))
         .cornerRadius(20)
-        .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
+        .shadow(color: bannerColor.opacity(0.4), radius: 8, x: 0, y: 4)
         .padding(.horizontal, 20)
         .padding(.top, 60)
         .transition(.move(edge: .top).combined(with: .opacity))

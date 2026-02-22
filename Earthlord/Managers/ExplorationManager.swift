@@ -18,6 +18,7 @@ final class ExplorationManager: NSObject, ObservableObject {
     @Published private(set) var isExploring           = false
     @Published private(set) var totalDistanceM        = 0.0   // 累计行走距离（米）
     @Published private(set) var durationSeconds       = 0     // 探索时长（秒）
+    @Published private(set) var locationCount         = 0     // 有效 GPS 点数量
 
     // 速度超限状态
     @Published private(set) var isSpeedViolation       = false
@@ -63,15 +64,16 @@ final class ExplorationManager: NSObject, ObservableObject {
     func startExploration() {
         guard !isExploring else { return }
 
-        totalDistanceM         = 0
-        durationSeconds        = 0
-        isSpeedViolation       = false
+        totalDistanceM          = 0
+        durationSeconds         = 0
+        locationCount           = 0
+        isSpeedViolation        = false
         speedViolationCountdown = 0
-        explorationFailed      = false
-        lastLocation           = nil
-        lastLocationTime       = nil
-        startTime              = Date()
-        isExploring            = true
+        explorationFailed       = false
+        lastLocation            = nil
+        lastLocationTime        = nil
+        startTime               = Date()
+        isExploring             = true
 
         logger.info("[ExploreManager] 开始探索")
 
@@ -208,8 +210,9 @@ extension ExplorationManager: CLLocationManagerDelegate {
                 logger.debug("[ExploreManager] 位置更新（speed 无效）acc=\(newLoc.horizontalAccuracy, format: .fixed(precision: 1))m delta=\(delta, format: .fixed(precision: 1))m")
             }
 
-            // 5. 累加距离
+            // 5. 累加距离 + GPS点计数
             totalDistanceM += delta
+            locationCount  += 1
         }
 
         lastLocation     = newLoc
