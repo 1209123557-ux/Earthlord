@@ -58,30 +58,29 @@ final class InventoryManager: ObservableObject {
     }
 
     // MARK: - Add Items（调用 RPC 累加数量，防止覆盖已有物品）
-    // nonisolated：让函数体脱离 @MainActor，使 UpsertInventoryParams 的
-    // Encodable 协议实现不被推断为主 actor 隔离，满足 Supabase rpc 的 Sendable 要求。
+    // 使用 [String: AnyJSON] 替代自定义 Encodable 结构体：
+    // AnyJSON 是 Supabase SDK 内置的 Codable & Sendable 类型，
+    // 其 Encodable 协议实现由 SDK 定义，不存在 @MainActor 隔离推断。
 
-    nonisolated func addItems(_ list: [(itemId: String, quantity: Int)]) async throws {
+    func addItems(_ list: [(itemId: String, quantity: Int)]) async throws {
         guard !list.isEmpty else { return }
-
-        // 在非隔离上下文中安全地读取主 actor 上的 currentUser
-        let userId = await MainActor.run { AuthManager.shared.currentUser?.id }
-        guard let userId else {
+        guard let userId = AuthManager.shared.currentUser?.id else {
             throw InventoryError.notAuthenticated
         }
 
         // 调用 upsert_inventory_item RPC：有则 +N，没有则新建
         for entry in list {
+            let params: [String: AnyJSON] = [
+                "p_user_id":  .string(userId.uuidString.lowercased()),
+                "p_item_id":  .string(entry.itemId),
+                "p_quantity": .integer(entry.quantity)
+            ]
             try await supabase
-                .rpc("upsert_inventory_item", params: UpsertInventoryParams(
-                    p_user_id:  userId.uuidString.lowercased(),
-                    p_item_id:  entry.itemId,
-                    p_quantity: entry.quantity
-                ))
+                .rpc("upsert_inventory_item", params: params)
                 .execute()
         }
 
-        // 写完后回到主 actor 刷新本地缓存
+        // 写完后刷新本地缓存
         await fetchInventory()
     }
 
