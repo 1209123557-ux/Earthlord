@@ -49,6 +49,26 @@ enum CoordinateConverter {
         return CLLocationCoordinate2D(latitude: gcj02Lat, longitude: gcj02Lon)
     }
 
+    /// GCJ-02 → WGS-84 转换（中国地图坐标 → GPS 原始坐标）
+    /// 用于将 MKLocalSearch 返回的 GCJ-02 坐标还原为 WGS-84，
+    /// 以便 CLCircularRegion / CLLocation.distance 与设备 GPS 正确比较。
+    /// 采用迭代逼近法，10 次迭代后误差 < 1cm。
+    static func gcj02ToWgs84(_ gcj02: CLLocationCoordinate2D) -> CLLocationCoordinate2D {
+        if outOfChina(gcj02.latitude, gcj02.longitude) { return gcj02 }
+        var wgs84 = gcj02
+        for _ in 0..<10 {
+            let candidate = wgs84ToGcj02(wgs84)
+            let dLat = candidate.latitude  - gcj02.latitude
+            let dLon = candidate.longitude - gcj02.longitude
+            wgs84 = CLLocationCoordinate2D(
+                latitude:  wgs84.latitude  - dLat,
+                longitude: wgs84.longitude - dLon
+            )
+            if abs(dLat) < 1e-10 && abs(dLon) < 1e-10 { break }
+        }
+        return wgs84
+    }
+
     /// 批量转换坐标数组
     /// - Parameter wgs84Coordinates: WGS-84 坐标数组
     /// - Returns: GCJ-02 坐标数组

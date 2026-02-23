@@ -150,8 +150,11 @@ final class ExplorationManager: NSObject, ObservableObject {
 
     private func setupGeofences(for pois: [GamePOI]) {
         for poi in pois {
+            // MKLocalSearch 在中国返回 GCJ-02 坐标；CLCircularRegion 用设备 GPS（WGS-84）
+            // 判断是否在围栏内，因此必须先将 GCJ-02 转回 WGS-84，否则偏差 100-500m 永远不触发。
+            let wgs84Center = CoordinateConverter.gcj02ToWgs84(poi.coordinate)
             let region = CLCircularRegion(
-                center:     poi.coordinate,
+                center:     wgs84Center,
                 radius:     50,
                 identifier: "poi_\(poi.id)"
             )
@@ -159,7 +162,7 @@ final class ExplorationManager: NSObject, ObservableObject {
             region.notifyOnExit  = false
             clManager.startMonitoring(for: region)
         }
-        logger.info("[ExploreManager] 已设置 \(pois.count) 个地理围栏（50m）")
+        logger.info("[ExploreManager] 已设置 \(pois.count) 个地理围栏（50m，已修正 GCJ-02→WGS-84）")
         expLogger.log("🔔 已为 \(pois.count) 个 POI 设置 50m 地理围栏")
     }
 
@@ -178,10 +181,11 @@ final class ExplorationManager: NSObject, ObservableObject {
               !showPOIPopup else { return }
 
         // 用最近一次 GPS 坐标估算距离
+        // poi.coordinate 是 GCJ-02，需转成 WGS-84 后才能与设备 GPS（WGS-84）正确比较
         let dist: Double
         if let lastLoc = lastLocation {
-            let poiLoc = CLLocation(latitude: poi.coordinate.latitude,
-                                    longitude: poi.coordinate.longitude)
+            let wgs84 = CoordinateConverter.gcj02ToWgs84(poi.coordinate)
+            let poiLoc = CLLocation(latitude: wgs84.latitude, longitude: wgs84.longitude)
             dist = lastLoc.distance(from: poiLoc)
         } else {
             dist = 50
