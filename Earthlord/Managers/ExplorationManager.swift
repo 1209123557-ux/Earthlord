@@ -166,7 +166,7 @@ extension ExplorationManager: CLLocationManagerDelegate {
 
             // 5. 速度超限检测 → 立即停止
             if newLoc.speed >= 0 && newLoc.speed > speedLimitMS {
-                logger.warning("[ExploreManager] 超速 \(currentSpeedKmh, format: .fixed(precision: 1))km/h，立即终止")
+                logger.warning("[ExploreManager] 超速 \(self.currentSpeedKmh, format: .fixed(precision: 1))km/h，立即终止")
                 forceStopDueToSpeed()
                 return
             }
