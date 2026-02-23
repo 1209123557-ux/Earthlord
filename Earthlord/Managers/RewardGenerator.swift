@@ -137,6 +137,20 @@ enum RewardGenerator {
                      .sorted { $0.itemId < $1.itemId }
     }
 
+    // MARK: - POI 搜刮物品生成（1-3 件，铜级概率分布）
+
+    /// 玩家搜刮 POI 时调用，随机返回 1-3 件物品
+    static func generatePOILoot() -> [(itemId: String, quantity: Int)] {
+        let count = Int.random(in: 1...3)
+        var result: [String: Int] = [:]
+        for _ in 0..<count {
+            let itemId = pickItemId(tier: .bronze)
+            result[itemId, default: 0] += Int.random(in: 1...2)
+        }
+        return result.map { (itemId: $0.key, quantity: $0.value) }
+                     .sorted { $0.itemId < $1.itemId }
+    }
+
     // MARK: - 私有
 
     private static func pickItemId(tier: RewardTier) -> String {

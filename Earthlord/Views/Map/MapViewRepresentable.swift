@@ -2,11 +2,27 @@
 //  MapViewRepresentable.swift
 //  Earthlord
 //
-//  MKMapView 的 SwiftUI 包装器 - 显示苹果地图、轨迹、领地多边形
+//  MKMapView 的 SwiftUI 包装器 - 显示苹果地图、轨迹、领地多边形、POI 标注
 //
 
 import SwiftUI
 import MapKit
+
+// MARK: - POIAnnotation（自定义标注数据）
+
+/// 携带 GamePOI 信息的 MKAnnotation，用于在地图上显示 POI 图钉
+final class POIAnnotation: NSObject, MKAnnotation {
+    let poi: GamePOI
+
+    var coordinate: CLLocationCoordinate2D { poi.coordinate }
+    var title: String? { poi.name }
+    var subtitle: String? { poi.poiType.displayName }
+
+    init(poi: GamePOI) {
+        self.poi = poi
+        super.init()
+    }
+}
 
 // MARK: - MapViewRepresentable
 /// 将 UIKit 的 MKMapView 包装成 SwiftUI View
@@ -35,12 +51,18 @@ struct MapViewRepresentable: UIViewRepresentable {
     /// 领地版本号（只在该值变化时才重绘领地，避免频繁刷新）
     let territoriesVersion: Int
 
+    // MARK: - POI Display
+    /// 探索中搜索到的附近 POI
+    let nearbyPOIs: [GamePOI]
+    /// POI 版本号（变化时刷新标注）
+    let poiVersion: Int
+
     // MARK: - UIViewRepresentable Methods
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
 
         mapView.mapType = .hybrid
-        mapView.pointOfInterestFilter = .excludingAll
+        mapView.pointOfInterestFilter = .excludingAll  // 隐藏系统内置 POI，只显示我们的
         mapView.showsBuildings = false
         mapView.showsUserLocation = true
         mapView.isZoomEnabled = true
@@ -60,6 +82,12 @@ struct MapViewRepresentable: UIViewRepresentable {
         if territoriesVersion != context.coordinator.lastTerritoryVersion {
             context.coordinator.lastTerritoryVersion = territoriesVersion
             drawTerritories(on: uiView)
+        }
+
+        // 只有 POI 版本号变化时才刷新标注
+        if poiVersion != context.coordinator.lastPOIVersion {
+            context.coordinator.lastPOIVersion = poiVersion
+            updatePOIAnnotations(on: uiView)
         }
     }
 
@@ -125,11 +153,24 @@ struct MapViewRepresentable: UIViewRepresentable {
         }
     }
 
+    // MARK: - Private: POI Annotations
+    /// 更新 POI 标注（先移除旧的，再添加最新的）
+    private func updatePOIAnnotations(on mapView: MKMapView) {
+        let existing = mapView.annotations.compactMap { $0 as? POIAnnotation }
+        mapView.removeAnnotations(existing)
+
+        guard !nearbyPOIs.isEmpty else { return }
+        let annotations = nearbyPOIs.map { POIAnnotation(poi: $0) }
+        mapView.addAnnotations(annotations)
+    }
+
     // MARK: - Coordinator
     class Coordinator: NSObject, MKMapViewDelegate {
         var parent: MapViewRepresentable
         /// 上次绘制领地时的版本号（防止重复绘制）
         var lastTerritoryVersion = -1
+        /// 上次刷新 POI 标注时的版本号
+        var lastPOIVersion = -1
         private var hasInitialCentered = false
 
         init(_ parent: MapViewRepresentable) {
@@ -200,6 +241,43 @@ struct MapViewRepresentable: UIViewRepresentable {
 
             return MKOverlayRenderer(overlay: overlay)
         }
+
+        // ⭐ 自定义 POI 标注视图
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            // 不修改用户位置蓝点
+            if annotation is MKUserLocation { return nil }
+
+            guard let poiAnnotation = annotation as? POIAnnotation else { return nil }
+
+            let identifier = "POIAnnotation"
+            let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
+                ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+
+            view.annotation      = annotation
+            view.markerTintColor = poiAnnotation.poi.isLooted
+                ? .systemGray
+                : markerUIColor(for: poiAnnotation.poi.poiType)
+            view.glyphImage      = UIImage(
+                systemName: poiAnnotation.poi.poiType.systemImage
+            )?.withRenderingMode(.alwaysTemplate)
+            view.titleVisibility = .adaptive
+            view.canShowCallout  = true
+
+            return view
+        }
+
+        // MARK: - POI 标注颜色映射
+        private func markerUIColor(for type: GamePOIType) -> UIColor {
+            switch type {
+            case .store:      return UIColor.systemOrange
+            case .hospital:   return UIColor.systemRed
+            case .pharmacy:   return UIColor(red: 0.8, green: 0.2, blue: 0.8, alpha: 1)
+            case .gasStation: return UIColor.systemYellow
+            case .restaurant: return UIColor.systemBrown
+            case .cafe:       return UIColor(red: 0.5, green: 0.3, blue: 0.1, alpha: 1)
+            case .unknown:    return UIColor.systemGray
+            }
+        }
     }
 }
 
@@ -214,6 +292,8 @@ struct MapViewRepresentable: UIViewRepresentable {
         isPathClosed: false,
         territories: [],
         currentUserId: nil,
-        territoriesVersion: 0
+        territoriesVersion: 0,
+        nearbyPOIs: [],
+        poiVersion: 0
     )
 }

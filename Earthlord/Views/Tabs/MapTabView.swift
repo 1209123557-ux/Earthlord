@@ -2,7 +2,7 @@
 //  MapTabView.swift
 //  Earthlord
 //
-//  地图页面 - 显示真实地图、用户位置、定位权限管理
+//  地图页面 - 显示真实地图、用户位置、定位权限管理、POI 搜刮系统
 //
 
 import SwiftUI
@@ -10,6 +10,13 @@ import MapKit
 import UIKit
 import Supabase
 import OSLog
+
+// MARK: - 搜刮临时数据（用于传给 ScavengeResultView）
+
+private struct ScavengeData {
+    let poi:   GamePOI
+    let items: [(itemId: String, quantity: Int)]
+}
 
 struct MapTabView: View {
     // MARK: - Environment
@@ -34,6 +41,10 @@ struct MapTabView: View {
     @State private var isFinishingExploration = false
     @State private var showExplorationResult = false
     @State private var explorationErrorMessage: String? = nil
+
+    // MARK: - POI 搜刮状态
+    @State private var scavengeData: ScavengeData? = nil
+    @State private var showScavengeResult = false
 
     private let mapLogger = Logger(subsystem: "com.earthlord", category: "MapTabView")
 
@@ -72,7 +83,22 @@ struct MapTabView: View {
                     bottomActionArea
                 }
             }
+
+            // POI 接近弹窗（叠加在最顶层）
+            if explorationManager.showPOIPopup, let poi = explorationManager.currentNearbyPOI {
+                Color.black.opacity(0.45)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+
+                POIProximityPopup(
+                    poi:        poi,
+                    onScavenge: { handleScavenge(poi) },
+                    onDismiss:  { explorationManager.dismissPOIPopup() }
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.easeInOut(duration: 0.3), value: explorationManager.showPOIPopup)
         .onAppear {
             if locationManager.authorizationStatus == .notDetermined {
                 locationManager.requestPermission()
@@ -84,6 +110,11 @@ struct MapTabView: View {
         .sheet(isPresented: $showExplorationResult, onDismiss: { explorationErrorMessage = nil }) {
             if let result = explorationResult {
                 ExplorationResultView(result: result, errorMessage: explorationErrorMessage)
+            }
+        }
+        .sheet(isPresented: $showScavengeResult) {
+            if let data = scavengeData {
+                ScavengeResultView(poi: data.poi, items: data.items)
             }
         }
         .onReceive(explorationManager.$explorationFailed) { failed in
@@ -103,7 +134,9 @@ struct MapTabView: View {
                 isPathClosed: locationManager.isPathClosed,
                 territories: territories,
                 currentUserId: currentUserId,
-                territoriesVersion: territoriesVersion
+                territoriesVersion: territoriesVersion,
+                nearbyPOIs: explorationManager.nearbyPOIs,
+                poiVersion: explorationManager.poiVersion
             )
             .ignoresSafeArea()
             .colorMultiply(Color(red: 1.0, green: 0.88, blue: 0.72))
@@ -334,9 +367,12 @@ struct MapTabView: View {
         .disabled(isFinishingExploration)
     }
 
+    // MARK: - 探索操作
+
     private func startExploring() {
         mapLogger.info("[MapTabView] 用户点击开始探索")
-        explorationManager.startExploration()
+        // 传入当前位置用于 POI 搜索
+        explorationManager.startExploration(from: locationManager.userLocation)
     }
 
     private func stopExploring() {
@@ -399,6 +435,35 @@ struct MapTabView: View {
             explorationResult      = result
             showExplorationResult  = true
         }
+    }
+
+    // MARK: - POI 搜刮逻辑
+
+    private func handleScavenge(_ poi: GamePOI) {
+        // 1. 关闭接近弹窗
+        explorationManager.dismissPOIPopup()
+        // 2. 标记 POI 已搜刮（地图标注变灰）
+        explorationManager.markPOILooted(poi.id)
+
+        // 3. 随机生成物品
+        let items = RewardGenerator.generatePOILoot()
+        mapLogger.info("[MapTabView] POI 搜刮 '\(poi.name)' 获得 \(items.count) 种物品")
+        ExplorationLogger.shared.log("🎒 搜刮 \(poi.name)，获得 \(items.count) 种物品")
+
+        // 4. 存入背包（异步，不阻塞 UI）
+        Task {
+            do {
+                try await InventoryManager.shared.addItems(items)
+                ExplorationLogger.shared.log("✅ POI 搜刮物品已存入背包", type: .success)
+            } catch {
+                mapLogger.error("[MapTabView] POI 背包写入失败: \(error.localizedDescription)")
+                ExplorationLogger.shared.log("⚠️ POI 物品写入失败: \(error.localizedDescription)", type: .warning)
+            }
+        }
+
+        // 5. 显示搜刮结果
+        scavengeData      = ScavengeData(poi: poi, items: items)
+        showScavengeResult = true
     }
 
     private func handleExplorationFailed() {
@@ -545,6 +610,17 @@ struct MapTabView: View {
                         .foregroundColor(.white.opacity(0.85))
                 }
                 Spacer()
+
+                // POI 数量提示
+                if !explorationManager.nearbyPOIs.isEmpty {
+                    HStack(spacing: 3) {
+                        Image(systemName: "mappin.circle.fill")
+                            .font(.system(size: 11))
+                        Text("\(explorationManager.nearbyPOIs.count) 个地点")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundColor(.white.opacity(0.8))
+                }
             }
         }
         .padding(.horizontal, 16)

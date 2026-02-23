@@ -323,3 +323,51 @@ enum MockExplorationResult {
         ]
     )
 }
+
+// MARK: - GamePOI（MapKit 真实 POI，用于探索模式搜刮）
+
+/// POI 类型枚举，映射自 MKPointOfInterestCategory
+enum GamePOIType: String {
+    case store      = "store"
+    case hospital   = "hospital"
+    case pharmacy   = "pharmacy"
+    case gasStation = "gasStation"
+    case restaurant = "restaurant"
+    case cafe       = "cafe"
+    case unknown    = "unknown"
+
+    /// 显示名称（中文）
+    var displayName: String {
+        switch self {
+        case .store:      return "商店"
+        case .hospital:   return "医院"
+        case .pharmacy:   return "药店"
+        case .gasStation: return "加油站"
+        case .restaurant: return "餐厅"
+        case .cafe:       return "咖啡馆"
+        case .unknown:    return "地点"
+        }
+    }
+
+    /// SF Symbol 图标名（用于 SwiftUI 视图）
+    var systemImage: String {
+        switch self {
+        case .store:      return "cart.fill"
+        case .hospital:   return "cross.fill"
+        case .pharmacy:   return "pills.fill"
+        case .gasStation: return "fuelpump.fill"
+        case .restaurant: return "fork.knife"
+        case .cafe:       return "cup.and.saucer.fill"
+        case .unknown:    return "mappin.fill"
+        }
+    }
+}
+
+/// 来自 MapKit 搜索的真实地点，用于探索模式地理围栏与搜刮
+struct GamePOI: Identifiable {
+    let id:         String
+    let name:       String
+    let coordinate: CLLocationCoordinate2D
+    let poiType:    GamePOIType
+    var isLooted:   Bool = false
+}
