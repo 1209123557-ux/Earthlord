@@ -36,7 +36,7 @@ struct ExplorationResultView: View {
                     VStack(spacing: 20) {
                         achievementHeader
                         statsCard
-                        lootCard
+                        if !result.lootedItems.isEmpty { lootCard }
                         confirmButton
                     }
                     .padding(.horizontal, 20)
