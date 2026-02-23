@@ -302,7 +302,7 @@ struct ExplorationResultView: View {
 
     private var confirmButton: some View {
         Button(action: { dismiss() }) {
-            Text("收下，继续探索")
+            Text(result.rewardTier == .none ? "返回" : "收下，继续探索")
                 .font(.system(size: 16, weight: .bold))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
