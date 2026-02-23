@@ -351,6 +351,7 @@ struct MapTabView: View {
             ExplorationLogger.shared.log("🏆 奖励等级: \(tier.rawValue)")
             ExplorationLogger.shared.log("🎁 生成奖励: \(rewards.count) 个物品")
 
+            // ① 保存探索会话记录（失败不影响背包）
             do {
                 try await saveExplorationSession(
                     startTime:       startTime,
@@ -361,12 +362,31 @@ struct MapTabView: View {
                     items:           rewards
                 )
                 ExplorationLogger.shared.log("✅ 探索会话完成 - 状态: completed", type: .success)
-                if !rewards.isEmpty {
-                    try await InventoryManager.shared.addItems(rewards)
-                }
             } catch {
-                mapLogger.error("[MapTabView] 保存探索数据失败: \(error.localizedDescription)")
-                ExplorationLogger.shared.log("❌ 探索会话保存失败: \(error.localizedDescription)", type: .error)
+                mapLogger.error("[MapTabView] 会话记录保存失败（不影响奖励）: \(error.localizedDescription)")
+                ExplorationLogger.shared.log("⚠️ 会话记录保存失败（不影响奖励）: \(error.localizedDescription)", type: .warning)
+            }
+
+            // ② 写入背包（与会话记录独立，网络恢复后重试一次）
+            if !rewards.isEmpty {
+                var retryCount = 0
+                var addSuccess = false
+                while retryCount <= 1 && !addSuccess {
+                    do {
+                        try await InventoryManager.shared.addItems(rewards)
+                        addSuccess = true
+                    } catch {
+                        retryCount += 1
+                        mapLogger.error("[MapTabView] 背包写入失败(第\(retryCount)次): \(error.localizedDescription)")
+                        ExplorationLogger.shared.log("⚠️ 背包写入失败，\(retryCount <= 1 ? "3秒后重试..." : "重试失败，奖励丢失")", type: .warning)
+                        if retryCount <= 1 {
+                            try? await Task.sleep(nanoseconds: 3_000_000_000)
+                        }
+                    }
+                }
+                if !addSuccess {
+                    ExplorationLogger.shared.log("❌ 背包写入最终失败，请检查网络后手动刷新", type: .error)
+                }
             }
 
             let result = ExplorationResult(
