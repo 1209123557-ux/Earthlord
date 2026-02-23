@@ -3,7 +3,13 @@
 //  Earthlord
 //
 //  负责探索模式下的 GPS 距离追踪、计时、速度限制检测，
-//  以及 POI 搜索、地理围栏管理和搜刮弹窗状态。
+//  以及 POI 搜索、手动距离检测和搜刮弹窗状态。
+//
+//  ⚠️ POI 接近检测采用手动距离计算而非地理围栏，原因：
+//  1. MKLocalSearch 在中国返回 GCJ-02 坐标，CLCircularRegion 按 WGS-84 解析，
+//     导致围栏中心偏移 100-500m，触发不准确。
+//  2. 地理围栏不触发"已在范围内"时的 didEnterRegion，而是 didDetermineState(.inside)。
+//  手动方案：每次 GPS 更新时将设备坐标转换为 GCJ-02，再与 POI 坐标（GCJ-02）比距离。
 //
 
 import Foundation
@@ -28,10 +34,12 @@ final class ExplorationManager: NSObject, ObservableObject {
 
     /// 本次探索搜索到的附近 POI 列表
     @Published private(set) var nearbyPOIs: [GamePOI] = []
-    /// 当前进入围栏的 POI（nil = 无弹窗）
+    /// 当前触发弹窗的 POI（nil = 无弹窗）
     @Published private(set) var currentNearbyPOI: GamePOI? = nil
     /// 控制 POI 接近弹窗显示
     @Published private(set) var showPOIPopup: Bool = false
+    /// 当前接近 POI 的距离（米），用于弹窗显示
+    @Published private(set) var currentNearbyPOIDistanceM: Double = 0
     /// 版本号：每次 POI 列表变化时自增，用于驱动地图刷新
     @Published private(set) var poiVersion: Int = 0
 
@@ -43,13 +51,19 @@ final class ExplorationManager: NSObject, ObservableObject {
     private var lastLocationTime: Date?
     private var startTime:    Date?
 
+    /// 本次探索中已触发过弹窗的 POI id（避免重复弹出）
+    private var triggeredPOIIds: Set<String> = []
+
     // GPS 过滤参数
-    private let maxAccuracyM:   Double = 50     // 精度阈值，超过则丢弃
-    private let maxJumpM:       Double = 100    // 单次跳变阈值，超过则丢弃
-    private let minIntervalSec: Double = 1.0    // 最短采样间隔
+    private let maxAccuracyM:   Double = 50
+    private let maxJumpM:       Double = 100
+    private let minIntervalSec: Double = 1.0
 
     // 速度限制：20 km/h = 5.555... m/s
     private let speedLimitMS: Double = 20_000.0 / 3_600.0
+
+    // POI 触发半径（米）
+    private let poiTriggerRadiusM: Double = 50
 
     // 日志
     private let logger = Logger(subsystem: "com.earthlord", category: "ExplorationManager")
@@ -81,6 +95,7 @@ final class ExplorationManager: NSObject, ObservableObject {
         lastLocationTime  = nil
         startTime         = Date()
         isExploring       = true
+        triggeredPOIIds   = []
 
         logger.info("[ExploreManager] 开始探索")
         expLogger.log("🚀 探索开始")
@@ -94,16 +109,14 @@ final class ExplorationManager: NSObject, ObservableObject {
             self?.durationSeconds += 1
         }
 
-        // POI 搜索：在后台异步完成，结果回到主线程更新
+        // POI 搜索：异步完成后回到主线程更新列表
         if let center = location {
             Task {
                 expLogger.log("🔍 开始搜索附近 POI...")
                 let pois = await POISearchManager.searchNearbyPOIs(center: center)
-                // MainActor.run 确保 @Published 更新在主线程
                 await MainActor.run {
                     self.nearbyPOIs = pois
                     self.poiVersion += 1
-                    self.setupGeofences(for: pois)
                     self.expLogger.log("📍 已加载 \(pois.count) 个附近 POI", type: .success)
                 }
             }
@@ -121,11 +134,12 @@ final class ExplorationManager: NSObject, ObservableObject {
         currentSpeedKmh = 0
 
         // 清理 POI 状态
-        clearGeofences()
-        nearbyPOIs       = []
-        showPOIPopup     = false
-        currentNearbyPOI = nil
-        poiVersion      += 1
+        nearbyPOIs              = []
+        showPOIPopup            = false
+        currentNearbyPOI        = nil
+        currentNearbyPOIDistanceM = 0
+        triggeredPOIIds         = []
+        poiVersion             += 1
 
         let dist  = Int(totalDistanceM)
         let dur   = durationSeconds
@@ -152,6 +166,7 @@ final class ExplorationManager: NSObject, ObservableObject {
     func dismissPOIPopup() {
         showPOIPopup     = false
         currentNearbyPOI = nil
+        currentNearbyPOIDistanceM = 0
     }
 
     /// 标记 POI 已搜刮，更新地图标注
@@ -161,28 +176,39 @@ final class ExplorationManager: NSObject, ObservableObject {
         poiVersion += 1
     }
 
-    // MARK: - 地理围栏
+    // MARK: - POI 接近检测（手动距离计算）
 
-    private func setupGeofences(for pois: [GamePOI]) {
-        for poi in pois {
-            let region = CLCircularRegion(
-                center:     poi.coordinate,
-                radius:     50,
-                identifier: "poi_\(poi.id)"
-            )
-            region.notifyOnEntry = true
-            region.notifyOnExit  = false
-            clManager.startMonitoring(for: region)
-        }
-        logger.info("[ExploreManager] 已设置 \(pois.count) 个地理围栏（50m）")
-        expLogger.log("🔔 已为 \(pois.count) 个 POI 设置 50m 地理围栏")
-    }
+    /// 在每次有效 GPS 更新后调用，检测是否进入任何 POI 的触发半径。
+    ///
+    /// **坐标处理**：
+    /// MKLocalSearch 在中国返回 GCJ-02 坐标（与地图显示对齐），
+    /// 设备 GPS 返回 WGS-84，需先转换为 GCJ-02 再比较距离，
+    /// 否则偏差可达 100-500m 导致触发失败。
+    private func checkPOIProximity(from rawLocation: CLLocation) {
+        guard !nearbyPOIs.isEmpty, !showPOIPopup else { return }
 
-    private func clearGeofences() {
-        let toRemove = clManager.monitoredRegions.filter { $0.identifier.hasPrefix("poi_") }
-        toRemove.forEach { clManager.stopMonitoring(for: $0) }
-        if !toRemove.isEmpty {
-            logger.info("[ExploreManager] 已清除 \(toRemove.count) 个地理围栏")
+        // 将 GPS(WGS-84) 转换为 GCJ-02，与 POI 坐标系对齐
+        let gcj02 = CoordinateConverter.wgs84ToGcj02(rawLocation.coordinate)
+        let gcj02Loc = CLLocation(latitude: gcj02.latitude, longitude: gcj02.longitude)
+
+        for poi in nearbyPOIs where !poi.isLooted && !triggeredPOIIds.contains(poi.id) {
+            let poiLoc = CLLocation(latitude: poi.coordinate.latitude,
+                                    longitude: poi.coordinate.longitude)
+            let dist = gcj02Loc.distance(from: poiLoc)
+
+            if dist <= poiTriggerRadiusM {
+                triggeredPOIIds.insert(poi.id)
+                let distInt = Int(dist)
+                logger.info("[ExploreManager] 距 '\(poi.name)' 仅 \(distInt)m，触发搜刮弹窗")
+                expLogger.log("🏪 进入 POI 范围: \(poi.name)（距离 \(distInt)m）")
+
+                DispatchQueue.main.async { [weak self] in
+                    self?.currentNearbyPOI        = poi
+                    self?.currentNearbyPOIDistanceM = dist
+                    self?.showPOIPopup             = true
+                }
+                break  // 每次只弹一个
+            }
         }
     }
 
@@ -194,7 +220,6 @@ final class ExplorationManager: NSObject, ObservableObject {
         expLogger.log("🚫 超速 \(speedStr)km/h，探索已自动停止", type: .error)
 
         clManager.stopUpdatingLocation()
-        clearGeofences()
         timer?.invalidate()
         timer           = nil
         isExploring     = false
@@ -223,12 +248,15 @@ extension ExplorationManager: CLLocationManagerDelegate {
         if let prevTime = lastLocationTime,
            now.timeIntervalSince(prevTime) < minIntervalSec { return }
 
-        // 3. 实时速度更新（不依赖位移计算，直接读 CLLocation.speed）
+        // 3. 实时速度更新
         if newLoc.speed >= 0 {
             currentSpeedKmh = newLoc.speed * 3.6
         }
 
-        // 4. 跳变过滤
+        // 4. POI 接近检测（每次有效位置都检查）
+        checkPOIProximity(from: newLoc)
+
+        // 5. 跳变过滤
         if let prev = lastLocation {
             let delta = newLoc.distance(from: prev)
 
@@ -239,14 +267,14 @@ extension ExplorationManager: CLLocationManagerDelegate {
                 return
             }
 
-            // 5. 速度超限检测 → 立即停止
+            // 6. 速度超限检测 → 立即停止
             if newLoc.speed >= 0 && newLoc.speed > speedLimitMS {
                 logger.warning("[ExploreManager] 超速 \(self.currentSpeedKmh, format: .fixed(precision: 1))km/h，立即终止")
                 forceStopDueToSpeed()
                 return
             }
 
-            // 6. 累加距离
+            // 7. 累加距离
             totalDistanceM += delta
             locationCount  += 1
 
@@ -261,26 +289,6 @@ extension ExplorationManager: CLLocationManagerDelegate {
 
         lastLocation     = newLoc
         lastLocationTime = now
-    }
-
-    // MARK: 地理围栏进入事件
-
-    func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
-        guard isExploring, region.identifier.hasPrefix("poi_") else { return }
-
-        guard let poi = nearbyPOIs.first(where: { "poi_\($0.id)" == region.identifier }),
-              !poi.isLooted else { return }
-
-        DispatchQueue.main.async { [weak self] in
-            self?.currentNearbyPOI = poi
-            self?.showPOIPopup     = true
-        }
-        logger.info("[ExploreManager] 进入 POI 围栏: \(poi.name)")
-        expLogger.log("🏪 进入 POI 范围: \(poi.name)（50m 内）")
-    }
-
-    func locationManager(_ manager: CLLocationManager, monitoringDidFailFor region: CLRegion?, withError error: Error) {
-        logger.warning("[ExploreManager] 围栏监控失败: \(error.localizedDescription)")
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {

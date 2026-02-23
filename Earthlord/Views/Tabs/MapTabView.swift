@@ -92,6 +92,7 @@ struct MapTabView: View {
 
                 POIProximityPopup(
                     poi:        poi,
+                    distanceM:  explorationManager.currentNearbyPOIDistanceM,
                     onScavenge: { handleScavenge(poi) },
                     onDismiss:  { explorationManager.dismissPOIPopup() }
                 )
