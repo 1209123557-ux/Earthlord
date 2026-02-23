@@ -437,15 +437,16 @@ struct MapTabView: View {
     // MARK: - 探索状态悬浮卡片
 
     private var explorationStatusBanner: some View {
-        let isViolation = explorationManager.isSpeedViolation
         let distM       = Int(explorationManager.totalDistanceM)
+        let speedKmh    = explorationManager.currentSpeedKmh
         let currentTier = RewardGenerator.calculateTier(distanceM: distM)
         let nextTier    = RewardGenerator.nextTierInfo(distanceM: distM)
-        let bannerColor: Color = isViolation ? .orange : ApocalypseTheme.success
+        // 速度超过 16 km/h 时变黄提醒（接近 20 限速），超过 20 会自动停止
+        let speedColor: Color = speedKmh >= 16 ? .yellow : .white
 
         return VStack(spacing: 0) {
 
-            // ── 上排：距离 | 时长 | GPS点数 + 结束按钮 ──
+            // ── 上排：距离 | 时长 | 速度 + 结束按钮 ──
             HStack(spacing: 0) {
                 // 距离
                 HStack(spacing: 4) {
@@ -468,11 +469,13 @@ struct MapTabView: View {
                     .fill(Color.white.opacity(0.35))
                     .frame(width: 1, height: 14)
                     .padding(.horizontal, 10)
-                // GPS 点数
+                // 实时速度
                 HStack(spacing: 4) {
-                    Image(systemName: "location.circle").font(.system(size: 13))
-                    Text("\(explorationManager.locationCount)")
+                    Image(systemName: "speedometer").font(.system(size: 13))
+                        .foregroundColor(speedColor)
+                    Text(String(format: "%.1f km/h", speedKmh))
                         .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(speedColor)
                 }
                 Spacer()
                 // 结束按钮
@@ -509,40 +512,30 @@ struct MapTabView: View {
 
             // ── 下排：奖励等级 + 进度提示 ──
             HStack(spacing: 6) {
-                if isViolation {
-                    Image(systemName: "exclamationmark.triangle.fill")
+                Text(currentTier.displayName)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.white)
+                if let next = nextTier {
+                    Text("距\(next.tierName)还差 \(next.remaining) m")
                         .font(.system(size: 13))
-                        .foregroundColor(.yellow)
-                    Text("速度过快！\(explorationManager.speedViolationCountdown)s 后终止探索")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.yellow)
+                        .foregroundColor(.white.opacity(0.85))
                 } else {
-                    Text(currentTier.displayName)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.white)
-                    if let next = nextTier {
-                        Text("距\(next.tierName)还差 \(next.remaining) m")
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.85))
-                    } else {
-                        Text("已达最高奖励等级 🎉")
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.85))
-                    }
+                    Text("已达最高奖励等级 🎉")
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.85))
                 }
                 Spacer()
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(bannerColor.opacity(0.92))
+        .background(ApocalypseTheme.success.opacity(0.92))
         .cornerRadius(20)
-        .shadow(color: bannerColor.opacity(0.4), radius: 8, x: 0, y: 4)
+        .shadow(color: ApocalypseTheme.success.opacity(0.4), radius: 8, x: 0, y: 4)
         .padding(.horizontal, 20)
         .padding(.top, 60)
         .transition(.move(edge: .top).combined(with: .opacity))
         .animation(.easeInOut(duration: 0.3), value: explorationManager.isExploring)
-        .animation(.easeInOut(duration: 0.2), value: isViolation)
     }
 
     private func formatExpDuration(_ seconds: Int) -> String {
