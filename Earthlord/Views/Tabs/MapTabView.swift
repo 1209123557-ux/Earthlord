@@ -348,6 +348,8 @@ struct MapTabView: View {
             let rewards = RewardGenerator.generateRewards(distanceM: distanceM)
             let tier    = RewardGenerator.calculateTier(distanceM: distanceM)
             mapLogger.info("[MapTabView] rewards=\(rewards.count) items tier=\(tier.rawValue)")
+            ExplorationLogger.shared.log("🏆 奖励等级: \(tier.rawValue)")
+            ExplorationLogger.shared.log("🎁 生成奖励: \(rewards.count) 个物品")
 
             do {
                 try await saveExplorationSession(
@@ -358,11 +360,13 @@ struct MapTabView: View {
                     tier:            tier,
                     items:           rewards
                 )
+                ExplorationLogger.shared.log("✅ 探索会话完成 - 状态: completed", type: .success)
                 if !rewards.isEmpty {
                     try await InventoryManager.shared.addItems(rewards)
                 }
             } catch {
                 mapLogger.error("[MapTabView] 保存探索数据失败: \(error.localizedDescription)")
+                ExplorationLogger.shared.log("❌ 探索会话保存失败: \(error.localizedDescription)", type: .error)
             }
 
             let result = ExplorationResult(
@@ -379,6 +383,7 @@ struct MapTabView: View {
 
     private func handleExplorationFailed() {
         mapLogger.error("[MapTabView] 探索被强制终止（超速）")
+        ExplorationLogger.shared.log("💥 探索因超速被强制终止", type: .error)
         explorationManager.resetFailedState()
         explorationErrorMessage = "行驶速度超过 30 km/h 达 10 秒，探索已自动终止。"
         let dummy = ExplorationResult(

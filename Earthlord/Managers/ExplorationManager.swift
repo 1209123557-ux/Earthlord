@@ -46,6 +46,7 @@ final class ExplorationManager: NSObject, ObservableObject {
 
     // 日志
     private let logger = Logger(subsystem: "com.earthlord", category: "ExplorationManager")
+    private var expLogger: ExplorationLogger { ExplorationLogger.shared }
 
     // MARK: - Init
 
@@ -76,6 +77,7 @@ final class ExplorationManager: NSObject, ObservableObject {
         isExploring             = true
 
         logger.info("[ExploreManager] 开始探索")
+        expLogger.log("🚀 探索开始")
 
         if clManager.authorizationStatus == .notDetermined {
             clManager.requestWhenInUseAuthorization()
@@ -111,6 +113,9 @@ final class ExplorationManager: NSObject, ObservableObject {
         let start = startTime ?? Date()
 
         logger.info("[ExploreManager] 停止探索 dist=\(dist)m dur=\(dur)s")
+        expLogger.log("🏁 最终距离: \(String(format: "%.2f", totalDistanceM)) 米")
+        expLogger.log("⏱️ 探索时长: \(dur) 秒")
+        expLogger.log("🔄 探索已停止，同步 UI 状态")
 
         lastLocation     = nil
         lastLocationTime = nil
@@ -127,6 +132,7 @@ final class ExplorationManager: NSObject, ObservableObject {
 
     private func forceStopDueToSpeed() {
         logger.error("[ExploreManager] 速度超限 10s，强制终止探索")
+        expLogger.log("🚫 超速 10s，强制终止探索", type: .error)
 
         speedViolationTimer?.invalidate()
         speedViolationTimer = nil
@@ -138,7 +144,7 @@ final class ExplorationManager: NSObject, ObservableObject {
         isExploring             = false
         isSpeedViolation        = false
         speedViolationCountdown = 0
-        explorationFailed       = true   // 触发 MapTabView 监听
+        explorationFailed       = true
     }
 }
 
@@ -182,7 +188,9 @@ extension ExplorationManager: CLLocationManagerDelegate {
                 if newLoc.speed > speedLimitMS {
                     // 超速
                     if !isSpeedViolation {
+                        let msg = String(format: "⚠️ 速度超限 %.1fkm/h，开始 10s 倒计时", kmh)
                         logger.warning("[ExploreManager] 速度超限 \(kmh, format: .fixed(precision: 1))km/h，开始 10s 倒计时")
+                        expLogger.log(msg, type: .warning)
                         isSpeedViolation        = true
                         speedViolationCountdown = 10
                         speedViolationTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -194,13 +202,13 @@ extension ExplorationManager: CLLocationManagerDelegate {
                             }
                         }
                     }
-                    // 超速期间跳过距离累加
                     lastLocation     = newLoc
                     lastLocationTime = now
                     return
                 } else if isSpeedViolation {
-                    // 速度恢复
+                    let msg = String(format: "✅ 速度恢复正常 %.1fkm/h，取消倒计时", kmh)
                     logger.info("[ExploreManager] 速度恢复正常 \(kmh, format: .fixed(precision: 1))km/h，取消倒计时")
+                    expLogger.log(msg)
                     speedViolationTimer?.invalidate()
                     speedViolationTimer     = nil
                     isSpeedViolation        = false
@@ -210,9 +218,13 @@ extension ExplorationManager: CLLocationManagerDelegate {
                 logger.debug("[ExploreManager] 位置更新（speed 无效）acc=\(newLoc.horizontalAccuracy, format: .fixed(precision: 1))m delta=\(delta, format: .fixed(precision: 1))m")
             }
 
-            // 5. 累加距离 + GPS点计数
+            // 5. 累加距离 + GPS点计数，每 10 个点写一条日志
             totalDistanceM += delta
             locationCount  += 1
+            if locationCount % 10 == 0 {
+                let msg = String(format: "📍 GPS #%d  累计 %.0fm", locationCount, totalDistanceM)
+                expLogger.log(msg)
+            }
         }
 
         lastLocation     = newLoc
@@ -228,5 +240,6 @@ extension ExplorationManager: CLLocationManagerDelegate {
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         logger.error("[ExploreManager] CLLocationManager 错误: \(error.localizedDescription)")
+        expLogger.log("❌ GPS 错误: \(error.localizedDescription)", type: .error)
     }
 }

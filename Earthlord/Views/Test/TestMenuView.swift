@@ -32,6 +32,16 @@ struct TestMenuView: View {
                         Text("圈地功能测试")
                     }
                 }
+
+                // 探索功能测试
+                NavigationLink(destination: ExplorationTestView()) {
+                    HStack {
+                        Image(systemName: "binoculars.fill")
+                            .foregroundColor(.green)
+                            .frame(width: 30)
+                        Text("探索功能测试")
+                    }
+                }
             }
         }
         .navigationTitle("开发测试")

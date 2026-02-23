@@ -36,6 +36,7 @@ final class InventoryManager: ObservableObject {
 
     func fetchInventory() async {
         logger.info("[Inventory] 开始拉取背包数据")
+        ExplorationLogger.shared.log("加载背包")
         isLoading = true
         errorMessage = nil
         do {
@@ -56,8 +57,10 @@ final class InventoryManager: ObservableObject {
                 )
             }
             logger.info("[Inventory] 拉取成功，共 \(rows.count) 条记录")
+            ExplorationLogger.shared.log("背包加载完成: \(rows.count) 个物品", type: .success)
         } catch {
             logger.error("[Inventory] 拉取失败: \(error.localizedDescription)")
+            ExplorationLogger.shared.log("背包加载失败: \(error.localizedDescription)", type: .error)
             errorMessage = "加载背包失败：\(error.localizedDescription)"
         }
         isLoading = false
@@ -75,6 +78,7 @@ final class InventoryManager: ObservableObject {
         }
 
         logger.info("[Inventory] 开始写入 \(list.count) 种物品")
+        ExplorationLogger.shared.log("🎒 添加 \(list.count) 个物品到背包")
 
         // 调用 upsert_inventory_item RPC：有则 +N，没有则新建
         for entry in list {
@@ -88,8 +92,10 @@ final class InventoryManager: ObservableObject {
                     .rpc("upsert_inventory_item", params: params)
                     .execute()
                 logger.info("[Inventory] 写入完成 itemId=\(entry.itemId) qty=\(entry.quantity)")
+                ExplorationLogger.shared.log("新物品添加: \(entry.itemId) x\(entry.quantity)", type: .success)
             } catch {
                 logger.error("[Inventory] 写入失败 itemId=\(entry.itemId): \(error.localizedDescription)")
+                ExplorationLogger.shared.log("❌ 物品写入失败 \(entry.itemId): \(error.localizedDescription)", type: .error)
                 throw error
             }
         }
