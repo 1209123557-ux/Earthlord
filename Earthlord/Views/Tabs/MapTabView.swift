@@ -46,6 +46,8 @@ struct MapTabView: View {
     @State private var scavengeData: ScavengeData? = nil
     @State private var showScavengeResult = false
 
+    @ObservedObject private var playerLocation = PlayerLocationManager.shared
+
     private let mapLogger = Logger(subsystem: "com.earthlord", category: "MapTabView")
 
     // MARK: - Computed
@@ -612,16 +614,21 @@ struct MapTabView: View {
                 }
                 Spacer()
 
-                // POI 数量提示
-                if !explorationManager.nearbyPOIs.isEmpty {
-                    HStack(spacing: 3) {
+                // 密度等级 + POI 数量提示
+                HStack(spacing: 3) {
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                        .font(.system(size: 11))
+                    Text(playerLocation.densityLevel.displayName)
+                        .font(.system(size: 11, weight: .medium))
+                    if !explorationManager.nearbyPOIs.isEmpty {
+                        Text("·").font(.system(size: 11))
                         Image(systemName: "mappin.circle.fill")
                             .font(.system(size: 11))
                         Text("\(explorationManager.nearbyPOIs.count) 个地点")
                             .font(.system(size: 11, weight: .medium))
                     }
-                    .foregroundColor(.white.opacity(0.8))
                 }
+                .foregroundColor(.white.opacity(0.8))
             }
         }
         .padding(.horizontal, 16)

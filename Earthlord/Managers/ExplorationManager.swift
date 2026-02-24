@@ -86,8 +86,16 @@ final class ExplorationManager: NSObject, ObservableObject {
 
         if let center = location {
             Task {
-                expLogger.log("🔍 开始搜索附近 POI...")
-                let pois = await POISearchManager.searchNearbyPOIs(center: center)
+                // 1. 上报当前位置（确保自己被计入在线）
+                await PlayerLocationManager.shared.reportLocation(center)
+
+                // 2. 查询附近玩家数 → 确定密度等级与 POI 上限
+                await PlayerLocationManager.shared.refreshNearbyCount(at: center)
+                let poiLimit = PlayerLocationManager.shared.densityLevel.poiLimit
+                expLogger.log("🔍 开始搜索附近 POI（密度: \(PlayerLocationManager.shared.densityLevel.displayName)，上限: \(poiLimit)）...")
+
+                // 3. 搜索 POI（带密度上限）
+                let pois = await POISearchManager.searchNearbyPOIs(center: center, limit: poiLimit)
                 await MainActor.run {
                     self.nearbyPOIs = pois
                     self.poiVersion += 1
@@ -272,6 +280,9 @@ extension ExplorationManager: CLLocationManagerDelegate {
 
         lastLocation     = newLoc
         lastLocationTime = now
+
+        // 30s 或移动 50m 时上报位置
+        Task { await PlayerLocationManager.shared.reportIfNeeded(newLoc.coordinate) }
     }
 
     // MARK: 地理围栏 - 进入时触发（正常行走进入围栏）

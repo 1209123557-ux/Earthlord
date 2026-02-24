@@ -28,12 +28,28 @@ enum POISearchManager {
 
     // MARK: - 公开接口
 
-    /// 搜索 center 周围 radiusM 米内的真实 POI，最多返回 20 个（iOS 地理围栏限制）
+    /// 搜索 center 周围 radiusM 米内的真实 POI，返回数量由 limit 控制。
+    /// - limit 由玩家密度等级决定（PlayerLocationManager.shared.densityLevel.poiLimit）
+    /// - 独行者保底：limit == 1 且 1km 内无结果时自动扩大到 2km 重搜一次
     static func searchNearbyPOIs(
-        center: CLLocationCoordinate2D,
-        radiusM: Double = 1000
+        center:  CLLocationCoordinate2D,
+        radiusM: Double = 1000,
+        limit:   Int    = 20
     ) async -> [GamePOI] {
+        var pois = await _search(center: center, radiusM: radiusM, limit: limit)
+        // 独行者保底：1km 无结果则扩至 2km
+        if limit == 1 && pois.isEmpty {
+            logger.info("[POISearch] 独行者 1km 无结果，扩大至 2km 重搜")
+            pois = await _search(center: center, radiusM: radiusM * 2, limit: 1)
+        }
+        return pois
+    }
 
+    private static func _search(
+        center:  CLLocationCoordinate2D,
+        radiusM: Double,
+        limit:   Int
+    ) async -> [GamePOI] {
         var allResults: [GamePOI] = []
 
         for (category, poiType) in searchConfigs {
@@ -55,8 +71,8 @@ enum POISearchManager {
             return seen.insert(key).inserted
         }
 
-        logger.info("[POISearch] 搜索完成，去重后 \(deduped.count) 个 POI（限 20）")
-        return Array(deduped.prefix(20))
+        logger.info("[POISearch] 搜索完成，去重后 \(deduped.count) 个 POI（上限 \(limit)）")
+        return Array(deduped.prefix(limit))
     }
 
     // MARK: - 私有：单类别搜索
