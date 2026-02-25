@@ -15,7 +15,7 @@ import OSLog
 
 private struct ScavengeData {
     let poi:   GamePOI
-    let items: [(itemId: String, quantity: Int)]
+    let items: [AILootItem]
 }
 
 struct MapTabView: View {
@@ -45,6 +45,7 @@ struct MapTabView: View {
     // MARK: - POI 搜刮状态
     @State private var scavengeData: ScavengeData? = nil
     @State private var showScavengeResult = false
+    @State private var isScavenging = false
 
     @ObservedObject private var playerLocation = PlayerLocationManager.shared
 
@@ -84,6 +85,22 @@ struct MapTabView: View {
                     Spacer()
                     bottomActionArea
                 }
+            }
+
+            // AI 生成物品加载遮罩
+            if isScavenging {
+                Color.black.opacity(0.55)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+                VStack(spacing: 14) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.6)
+                    Text("AI 生成物品中...")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(.white)
+                }
+                .transition(.opacity)
             }
 
             // POI 接近弹窗（叠加在最顶层）
@@ -443,30 +460,35 @@ struct MapTabView: View {
     // MARK: - POI 搜刮逻辑
 
     private func handleScavenge(_ poi: GamePOI) {
-        // 1. 关闭接近弹窗
+        // 1. 关闭接近弹窗，标记 POI 已搜刮
         explorationManager.dismissPOIPopup()
-        // 2. 标记 POI 已搜刮（地图标注变灰）
         explorationManager.markPOILooted(poi.id)
 
-        // 3. 随机生成物品
-        let items = RewardGenerator.generatePOILoot()
-        mapLogger.info("[MapTabView] POI 搜刮 '\(poi.name)' 获得 \(items.count) 种物品")
-        ExplorationLogger.shared.log("🎒 搜刮 \(poi.name)，获得 \(items.count) 种物品")
+        // 2. 显示 loading，异步调用 AI
+        isScavenging = true
+        mapLogger.info("[MapTabView] 🤖 开始 AI 生成物品: '\(poi.name)'（危险 \(poi.dangerLevel)/5）")
 
-        // 4. 存入背包（异步，不阻塞 UI）
         Task {
-            do {
-                try await InventoryManager.shared.addItems(items)
-                ExplorationLogger.shared.log("✅ POI 搜刮物品已存入背包", type: .success)
-            } catch {
-                mapLogger.error("[MapTabView] POI 背包写入失败: \(error.localizedDescription)")
-                ExplorationLogger.shared.log("⚠️ POI 物品写入失败: \(error.localizedDescription)", type: .warning)
-            }
-        }
+            // 3. 调用 AI，失败则用本地备用
+            let aiItems = await AIItemGenerator.shared.generateItems(for: poi, count: 3)
+            let items   = aiItems ?? AIItemGenerator.fallbackItems(for: poi)
 
-        // 5. 显示搜刮结果
-        scavengeData      = ScavengeData(poi: poi, items: items)
-        showScavengeResult = true
+            mapLogger.info("[MapTabView] ✅ 搜刮 '\(poi.name)' 获得 \(items.count) 件物品")
+            ExplorationLogger.shared.log("🎒 搜刮 \(poi.name)，获得 \(items.count) 件物品")
+
+            // 4. 存入 ai_inventory
+            do {
+                try await InventoryManager.shared.saveAIItems(items, poiName: poi.name)
+            } catch {
+                mapLogger.error("[MapTabView] AI 物品写入失败: \(error.localizedDescription)")
+                ExplorationLogger.shared.log("⚠️ AI 物品写入失败: \(error.localizedDescription)", type: .warning)
+            }
+
+            // 5. 关闭 loading，显示搜刮结果
+            isScavenging      = false
+            scavengeData      = ScavengeData(poi: poi, items: items)
+            showScavengeResult = true
+        }
     }
 
     private func handleExplorationFailed() {

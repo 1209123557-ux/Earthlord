@@ -104,6 +104,35 @@ final class InventoryManager: ObservableObject {
         await fetchInventory()
     }
 
+    // MARK: - Save AI Items（写入 ai_inventory 表）
+
+    func saveAIItems(_ items: [AILootItem], poiName: String) async throws {
+        guard !items.isEmpty else { return }
+        guard let userId = AuthManager.shared.currentUser?.id else {
+            throw InventoryError.notAuthenticated
+        }
+
+        logger.info("[Inventory] 写入 \(items.count) 件 AI 物品到 ai_inventory")
+
+        for item in items {
+            let params: [String: AnyJSON] = [
+                "user_id":  .string(userId.uuidString.lowercased()),
+                "name":     .string(item.name),
+                "category": .string(item.category),
+                "rarity":   .string(item.rarity),
+                "story":    .string(item.story),
+                "poi_name": .string(poiName)
+            ]
+            try await supabase
+                .from("ai_inventory")
+                .insert(params)
+                .execute()
+        }
+
+        logger.info("[Inventory] ✅ AI 物品写入完成")
+        ExplorationLogger.shared.log("🎒 AI 物品已保存（\(items.count) 件）", type: .success)
+    }
+
     // MARK: - Errors
 
     enum InventoryError: Error, LocalizedError {

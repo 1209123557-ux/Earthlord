@@ -2,7 +2,7 @@
 //  ScavengeResultView.swift
 //  Earthlord
 //
-//  搜刮 POI 后显示的结果界面，列出获得的物品并提供"确认"按钮。
+//  POI 搜刮结果界面：展示 AI 生成的物品名称、稀有度标签和末日背景故事。
 //
 
 import SwiftUI
@@ -10,10 +10,11 @@ import CoreLocation
 
 struct ScavengeResultView: View {
     let poi:   GamePOI
-    let items: [(itemId: String, quantity: Int)]
+    let items: [AILootItem]
 
     @Environment(\.dismiss) private var dismiss
-    @State private var itemsVisible = false
+    @State private var itemsVisible    = false
+    @State private var expandedStories: Set<UUID> = []
 
     var body: some View {
         ZStack {
@@ -67,27 +68,23 @@ struct ScavengeResultView: View {
                     VStack(spacing: 12) {
 
                         HStack(spacing: 8) {
-                            Image(systemName: "gift.fill")
+                            Image(systemName: "sparkles")
                                 .font(.system(size: 16))
                                 .foregroundColor(ApocalypseTheme.warning)
                             Text("获得物品")
                                 .font(.system(size: 15, weight: .bold))
                                 .foregroundColor(ApocalypseTheme.textPrimary)
                             Spacer()
+                            Text("点击展开故事")
+                                .font(.system(size: 11))
+                                .foregroundColor(ApocalypseTheme.textMuted)
                         }
 
-                        VStack(spacing: 0) {
-                            ForEach(Array(items.enumerated()), id: \.offset) { idx, loot in
-                                lootRow(loot: loot, index: idx)
-                                if idx < items.count - 1 {
-                                    Rectangle()
-                                        .fill(Color.white.opacity(0.06))
-                                        .frame(height: 1)
-                                }
+                        VStack(spacing: 6) {
+                            ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+                                aiItemRow(item: item, index: idx)
                             }
                         }
-                        .background(ApocalypseTheme.background.opacity(0.5))
-                        .cornerRadius(10)
 
                         HStack(spacing: 6) {
                             Image(systemName: "checkmark.circle.fill")
@@ -136,59 +133,105 @@ struct ScavengeResultView: View {
         }
     }
 
-    // MARK: - 物品行
+    // MARK: - AI 物品行
 
-    private func lootRow(loot: (itemId: String, quantity: Int), index: Int) -> some View {
-        let def      = MockItemDefinitions.find(loot.itemId)
-        let (icon, color) = iconAndColor(for: def?.category)
-        let rowDelay = Double(index) * 0.15
+    @ViewBuilder
+    private func aiItemRow(item: AILootItem, index: Int) -> some View {
+        let (icon, iconColor) = iconAndColor(for: item.category)
+        let rarityData        = rarityInfo(for: item.rarity)
+        let rowDelay          = Double(index) * 0.15
+        let isExpanded        = expandedStories.contains(item.id)
 
-        return HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(color.opacity(0.18))
-                    .frame(width: 38, height: 38)
-                Image(systemName: icon)
-                    .font(.system(size: 15))
-                    .foregroundColor(color)
+        VStack(alignment: .leading, spacing: 0) {
+            // 主行
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(iconColor.opacity(0.18))
+                        .frame(width: 38, height: 38)
+                    Image(systemName: icon)
+                        .font(.system(size: 15))
+                        .foregroundColor(iconColor)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.name)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(ApocalypseTheme.textPrimary)
+
+                    Text(rarityData.label)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(rarityData.color)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(rarityData.color.opacity(0.15))
+                        .cornerRadius(4)
+                }
+
+                Spacer()
+
+                // 展开故事按钮
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        if isExpanded {
+                            expandedStories.remove(item.id)
+                        } else {
+                            expandedStories.insert(item.id)
+                        }
+                    }
+                }) {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(ApocalypseTheme.textSecondary)
+                        .frame(width: 28, height: 28)
+                        .background(Color.white.opacity(0.06))
+                        .cornerRadius(6)
+                }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
 
-            Text(def?.displayName ?? loot.itemId)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundColor(ApocalypseTheme.textPrimary)
-
-            Spacer()
-
-            HStack(spacing: 8) {
-                Text("×\(loot.quantity)")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundColor(ApocalypseTheme.warning)
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 16))
-                    .foregroundColor(ApocalypseTheme.success)
-                    .scaleEffect(itemsVisible ? 1.0 : 0.1)
-                    .animation(
-                        .spring(response: 0.38, dampingFraction: 0.42)
-                            .delay(rowDelay + 0.18),
-                        value: itemsVisible
-                    )
+            // 展开的故事文字
+            if isExpanded {
+                Text("「\(item.story)」")
+                    .font(.system(size: 13, weight: .regular, design: .serif))
+                    .foregroundColor(ApocalypseTheme.textSecondary)
+                    .italic()
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 11)
+        .background(ApocalypseTheme.background.opacity(0.5))
+        .cornerRadius(10)
         .opacity(itemsVisible ? 1 : 0)
         .offset(y: itemsVisible ? 0 : 10)
         .animation(.easeOut(duration: 0.3).delay(rowDelay), value: itemsVisible)
     }
 
-    private func iconAndColor(for category: ItemCategory?) -> (String, Color) {
+    // MARK: - 分类 → 图标/颜色
+
+    private func iconAndColor(for category: String) -> (String, Color) {
         switch category {
-        case .water:    return ("drop.fill",   .blue)
-        case .food:     return ("fork.knife",  .orange)
-        case .medical:  return ("cross.fill",  .red)
-        case .material: return ("cube.fill",   Color(red: 0.6, green: 0.45, blue: 0.3))
-        case .tool:     return ("wrench.fill", .yellow)
-        case .none:     return ("questionmark", ApocalypseTheme.textMuted)
+        case "医疗": return ("cross.fill",      .red)
+        case "食物": return ("fork.knife",      .orange)
+        case "工具": return ("wrench.fill",     .yellow)
+        case "武器": return ("shield.fill",     Color(red: 0.9, green: 0.3, blue: 0.3))
+        case "材料": return ("cube.fill",       Color(red: 0.6, green: 0.45, blue: 0.3))
+        default:     return ("questionmark.circle", ApocalypseTheme.textMuted)
+        }
+    }
+
+    // MARK: - 稀有度 → 标签/颜色
+
+    private func rarityInfo(for rarity: String) -> (label: String, color: Color) {
+        switch rarity {
+        case "common":    return ("普通",  .gray)
+        case "uncommon":  return ("优秀",  .green)
+        case "rare":      return ("稀有",  .blue)
+        case "epic":      return ("史诗",  .purple)
+        case "legendary": return ("传奇",  Color(red: 1.0, green: 0.75, blue: 0.0))
+        default:          return ("普通",  .gray)
         }
     }
 }
@@ -201,13 +244,17 @@ struct ScavengeResultView: View {
             ScavengeResultView(
                 poi: GamePOI(
                     id: "test",
-                    name: "沃尔玛超市",
+                    name: "协和医院急诊室",
                     coordinate: .init(latitude: 31.23, longitude: 121.47),
-                    poiType: .store
+                    poiType: .hospital
                 ),
                 items: [
-                    (itemId: "item_water_bottle", quantity: 2),
-                    (itemId: "item_bandage",      quantity: 1),
+                    AILootItem(name: "「最后的希望」应急包", category: "医疗",  rarity: "epic",
+                               story: "这个急救包上贴着一张便签：'给值夜班的自己准备的'。便签已经褪色，主人再也没能用上它..."),
+                    AILootItem(name: "护士站的咖啡罐头",   category: "食物",  rarity: "rare",
+                               story: "罐头上写着'夜班续命神器'。末日来临时，护士们大概正在喝着咖啡讨论患者病情。"),
+                    AILootItem(name: "急诊室钥匙扣",       category: "工具",  rarity: "uncommon",
+                               story: "金属钥匙扣上刻着'急诊23'，可能属于一位忙碌的住院医生。"),
                 ]
             )
         }

@@ -370,4 +370,15 @@ struct GamePOI: Identifiable {
     let coordinate: CLLocationCoordinate2D
     let poiType:    GamePOIType
     var isLooted:   Bool = false
+
+    /// 危险等级（1-5），由 POI 类型推算，决定 AI 生成物品的稀有度分布
+    var dangerLevel: Int {
+        switch poiType {
+        case .hospital, .pharmacy: return 4
+        case .gasStation:          return 3
+        case .store:               return 2
+        case .restaurant, .cafe:   return 1
+        case .unknown:             return 2
+        }
+    }
 }
