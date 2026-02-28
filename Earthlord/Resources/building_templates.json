@@ -1,0 +1,67 @@
+[
+  {
+    "id": "campfire",
+    "name": "篝火",
+    "description": "提供温暖和基础照明，是最简单的建造物。",
+    "category": "survival",
+    "level": 1,
+    "max_level": 3,
+    "build_time_seconds": 30,
+    "required_resources": {
+      "item_wood": 30,
+      "item_rope": 10
+    }
+  },
+  {
+    "id": "shelter",
+    "name": "庇护所",
+    "description": "提供基础遮蔽和休息场所，让玩家在领地内恢复体力。",
+    "category": "survival",
+    "level": 1,
+    "max_level": 5,
+    "build_time_seconds": 60,
+    "required_resources": {
+      "item_wood": 50,
+      "item_scrap_metal": 20
+    }
+  },
+  {
+    "id": "storage_small",
+    "name": "小仓库",
+    "description": "扩展背包容量，可存放更多物资。",
+    "category": "storage",
+    "level": 1,
+    "max_level": 5,
+    "build_time_seconds": 45,
+    "required_resources": {
+      "item_wood": 40,
+      "item_scrap_metal": 20
+    }
+  },
+  {
+    "id": "farm_simple",
+    "name": "简易农田",
+    "description": "可以种植基础作物，定期产出食物资源。",
+    "category": "production",
+    "level": 1,
+    "max_level": 4,
+    "build_time_seconds": 60,
+    "required_resources": {
+      "item_wood": 20,
+      "item_rope": 5
+    }
+  },
+  {
+    "id": "solar_panel",
+    "name": "太阳能板",
+    "description": "利用太阳能发电，为领地提供稳定能源供应。",
+    "category": "energy",
+    "level": 1,
+    "max_level": 3,
+    "build_time_seconds": 120,
+    "required_resources": {
+      "item_scrap_metal": 60,
+      "item_generator_part": 20
+    }
+  }
+]

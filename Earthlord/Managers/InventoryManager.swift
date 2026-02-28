@@ -104,6 +104,24 @@ final class InventoryManager: ObservableObject {
         await fetchInventory()
     }
 
+    // MARK: - Remove Items（调用 remove_inventory_item RPC 原子扣减）
+
+    func removeItem(_ itemId: String, quantity: Int) async throws {
+        guard let userId = AuthManager.shared.currentUser?.id else {
+            throw InventoryError.notAuthenticated
+        }
+        let params: [String: AnyJSON] = [
+            "p_user_id":  .string(userId.uuidString.lowercased()),
+            "p_item_id":  .string(itemId),
+            "p_quantity": .integer(quantity)
+        ]
+        try await supabase
+            .rpc("remove_inventory_item", params: params)
+            .execute()
+        logger.info("[Inventory] 扣减完成 itemId=\(itemId) qty=\(quantity)")
+        await fetchInventory()
+    }
+
     // MARK: - Save AI Items（写入 ai_inventory 表）
 
     func saveAIItems(_ items: [AILootItem], poiName: String) async throws {
