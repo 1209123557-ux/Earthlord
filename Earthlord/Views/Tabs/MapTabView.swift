@@ -48,6 +48,7 @@ struct MapTabView: View {
     @State private var isScavenging = false
 
     @ObservedObject private var playerLocation = PlayerLocationManager.shared
+    @ObservedObject private var buildingManager = BuildingManager.shared
 
     private let mapLogger = Logger(subsystem: "com.earthlord", category: "MapTabView")
 
@@ -126,6 +127,7 @@ struct MapTabView: View {
                 locationManager.startUpdatingLocation()
             }
             Task { await loadTerritories() }
+            Task { await buildingManager.fetchAllPlayerBuildings() }
         }
         .sheet(isPresented: $showExplorationResult, onDismiss: { explorationErrorMessage = nil }) {
             if let result = explorationResult {
@@ -156,7 +158,9 @@ struct MapTabView: View {
                 currentUserId: currentUserId,
                 territoriesVersion: territoriesVersion,
                 nearbyPOIs: explorationManager.nearbyPOIs,
-                poiVersion: explorationManager.poiVersion
+                poiVersion: explorationManager.poiVersion,
+                buildings: buildingManager.playerBuildings,
+                buildingVersion: buildingManager.playerBuildings.count
             )
             .ignoresSafeArea()
             .colorMultiply(Color(red: 1.0, green: 0.88, blue: 0.72))

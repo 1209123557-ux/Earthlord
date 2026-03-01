@@ -177,6 +177,20 @@ class TerritoryManager {
         return territories
     }
 
+    // MARK: - 重命名领地
+
+    func updateTerritoryName(territoryId: String, newName: String) async throws {
+        guard AuthManager.shared.currentUser != nil else {
+            throw TerritoryError.notLoggedIn
+        }
+        try await supabase
+            .from("territories")
+            .update(["name": newName])
+            .eq("id", value: territoryId)
+            .execute()
+        print("✅ 领地重命名成功: \(newName)")
+    }
+
     // MARK: - 删除领地（软删除）
 
     /// 将指定领地标记为非活跃（is_active = false）
@@ -362,6 +376,13 @@ class TerritoryManager {
             warningLevel: warningLevel
         )
     }
+}
+
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let territoryUpdated = Notification.Name("territoryUpdated")
+    static let territoryDeleted = Notification.Name("territoryDeleted")
 }
 
 // MARK: - 错误类型

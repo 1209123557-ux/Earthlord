@@ -8,6 +8,25 @@
 import SwiftUI
 import MapKit
 
+// MARK: - BuildingAnnotation（建筑标注）
+
+/// 携带 PlayerBuilding 信息的 MKAnnotation，用于在主地图显示建筑图钉
+final class BuildingAnnotation: NSObject, MKAnnotation {
+    let building: PlayerBuilding
+
+    /// 直接使用 DB 存储的 GCJ-02 坐标，无需转换
+    var coordinate: CLLocationCoordinate2D {
+        building.coordinate ?? CLLocationCoordinate2D(latitude: 0, longitude: 0)
+    }
+    var title: String? { building.buildingName }
+    var subtitle: String? { building.status.displayName }
+
+    init(building: PlayerBuilding) {
+        self.building = building
+        super.init()
+    }
+}
+
 // MARK: - POIAnnotation（自定义标注数据）
 
 /// 携带 GamePOI 信息的 MKAnnotation，用于在地图上显示 POI 图钉
@@ -57,6 +76,12 @@ struct MapViewRepresentable: UIViewRepresentable {
     /// POI 版本号（变化时刷新标注）
     let poiVersion: Int
 
+    // MARK: - Building Display
+    /// 玩家建筑列表（GCJ-02 坐标，直接使用）
+    var buildings: [PlayerBuilding] = []
+    /// 建筑版本号（变化时刷新标注）
+    var buildingVersion: Int = 0
+
     // MARK: - UIViewRepresentable Methods
     func makeUIView(context: Context) -> MKMapView {
         let mapView = MKMapView()
@@ -88,6 +113,12 @@ struct MapViewRepresentable: UIViewRepresentable {
         if poiVersion != context.coordinator.lastPOIVersion {
             context.coordinator.lastPOIVersion = poiVersion
             updatePOIAnnotations(on: uiView)
+        }
+
+        // 只有建筑版本号变化时才刷新建筑标注
+        if buildingVersion != context.coordinator.lastBuildingVersion {
+            context.coordinator.lastBuildingVersion = buildingVersion
+            updateBuildingAnnotations(on: uiView)
         }
     }
 
@@ -164,6 +195,17 @@ struct MapViewRepresentable: UIViewRepresentable {
         mapView.addAnnotations(annotations)
     }
 
+    // MARK: - Private: Building Annotations
+    /// 更新建筑标注（先移除旧的，再添加最新的）
+    private func updateBuildingAnnotations(on mapView: MKMapView) {
+        let existing = mapView.annotations.compactMap { $0 as? BuildingAnnotation }
+        mapView.removeAnnotations(existing)
+
+        let valid = buildings.filter { $0.coordinate != nil }
+        let annotations = valid.map { BuildingAnnotation(building: $0) }
+        mapView.addAnnotations(annotations)
+    }
+
     // MARK: - Coordinator
     class Coordinator: NSObject, MKMapViewDelegate {
         var parent: MapViewRepresentable
@@ -171,6 +213,8 @@ struct MapViewRepresentable: UIViewRepresentable {
         var lastTerritoryVersion = -1
         /// 上次刷新 POI 标注时的版本号
         var lastPOIVersion = -1
+        /// 上次刷新建筑标注时的版本号
+        var lastBuildingVersion = -1
         private var hasInitialCentered = false
 
         init(_ parent: MapViewRepresentable) {
@@ -242,10 +286,25 @@ struct MapViewRepresentable: UIViewRepresentable {
             return MKOverlayRenderer(overlay: overlay)
         }
 
-        // ⭐ 自定义 POI 标注视图
+        // ⭐ 自定义标注视图：建筑 + POI
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             // 不修改用户位置蓝点
             if annotation is MKUserLocation { return nil }
+
+            // 建筑标注
+            if let buildingAnnotation = annotation as? BuildingAnnotation {
+                let identifier = "BuildingAnnotation"
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
+                    ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                view.annotation = annotation
+                view.markerTintColor = buildingAnnotation.building.status == .constructing
+                    ? UIColor.systemBlue
+                    : UIColor.systemOrange
+                view.glyphImage = UIImage(systemName: "building.2.fill")?.withRenderingMode(.alwaysTemplate)
+                view.titleVisibility = .adaptive
+                view.canShowCallout = true
+                return view
+            }
 
             guard let poiAnnotation = annotation as? POIAnnotation else { return nil }
 

@@ -2,110 +2,204 @@
 //  TerritoryDetailView.swift
 //  Earthlord
 //
-//  领地详情页 - 显示地图预览、领地信息、删除操作、更多功能占位
+//  领地详情页 - 全屏地图 ZStack 设计
+//  - 顶部悬浮工具栏（关闭 / 建造 / 信息面板开关）
+//  - 底部可折叠信息面板（领地信息 + 建筑列表 + 删除）
+//  - 齿轮重命名 Alert
 //
 
 import SwiftUI
 import MapKit
 import CoreLocation
 
-// MARK: - TerritoryDetailView
-
 struct TerritoryDetailView: View {
-    let territory: Territory
+    @State private var territory: Territory
 
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var buildingManager = BuildingManager.shared
 
+    // MARK: - UI State
+    @State private var showInfoPanel = true
+    @State private var showBuildingBrowser = false
+    @State private var selectedTemplate: BuildingTemplate? = nil
+
+    // Rename
+    @State private var showRenameAlert = false
+    @State private var renameText = ""
+    @State private var isRenaming = false
+
+    // Delete
     @State private var showDeleteAlert = false
     @State private var isDeleting = false
     @State private var deleteError: String? = nil
 
+    // Upgrade / Demolish feedback
+    @State private var actionError: String? = nil
+
     var onDeleted: (() -> Void)?
+
+    init(territory: Territory, onDeleted: (() -> Void)? = nil) {
+        _territory = State(initialValue: territory)
+        self.onDeleted = onDeleted
+    }
+
+    // MARK: - Body
 
     var body: some View {
         ZStack {
-            ApocalypseTheme.background.ignoresSafeArea()
+            // 全屏地图
+            TerritoryMapView(
+                territoryCoordinates: territory.toCoordinates(),
+                buildings: buildingManager.playerBuildings.filter { $0.territoryId == territory.id },
+                templates: buildingManager.templateDict
+            )
+            .ignoresSafeArea()
 
-            ScrollView {
-                VStack(spacing: 0) {
-                    mapPreview
-                    contentSection
+            // 顶部工具栏
+            VStack(spacing: 0) {
+                TerritoryToolbarView(
+                    onDismiss: { dismiss() },
+                    onBuildingBrowser: { showBuildingBrowser = true },
+                    showInfoPanel: $showInfoPanel
+                )
+                Spacer()
+            }
+
+            // 底部信息面板
+            VStack(spacing: 0) {
+                Spacer()
+                if showInfoPanel {
+                    infoPanelView
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
+            .animation(.easeInOut(duration: 0.25), value: showInfoPanel)
         }
-        .navigationTitle(territory.displayName)
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button("关闭") { dismiss() }
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.white)
-                    .buttonStyle(.plain)
-            }
+        .toolbar(.hidden, for: .navigationBar)
+        // 建筑浏览器
+        .sheet(isPresented: $showBuildingBrowser) {
+            BuildingBrowserView(
+                onDismiss: { showBuildingBrowser = false },
+                onStartConstruction: { template in
+                    showBuildingBrowser = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        selectedTemplate = template
+                    }
+                }
+            )
         }
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        // 建造确认页
+        .sheet(item: $selectedTemplate) { template in
+            BuildingPlacementView(
+                template: template,
+                territory: territory,
+                onDismiss: { selectedTemplate = nil },
+                onConstructionStarted: {
+                    selectedTemplate = nil
+                    Task { await buildingManager.fetchPlayerBuildings(territoryId: territory.id) }
+                }
+            )
+        }
+        // 重命名 Alert
+        .alert("重命名领地", isPresented: $showRenameAlert) {
+            TextField("新名称", text: $renameText)
+            Button("取消", role: .cancel) {}
+            Button("确认") { Task { await performRename() } }
+        } message: {
+            Text("输入新的领地名称")
+        }
+        // 删除 Alert
         .alert("删除领地", isPresented: $showDeleteAlert) {
             Button("取消", role: .cancel) {}
-            Button("确认删除", role: .destructive) {
-                Task { await performDelete() }
-            }
+            Button("确认删除", role: .destructive) { Task { await performDelete() } }
         } message: {
             Text("确定要放弃「\(territory.displayName)」？此操作不可撤销。")
         }
-    }
-
-    // MARK: - Map Preview
-    private var mapPreview: some View {
-        TerritoryMapPreview(coordinates: territory.toCoordinates())
-            .frame(height: 240)
-            .colorMultiply(Color(red: 1.0, green: 0.88, blue: 0.72))
-            .saturation(0.72)
-            .brightness(-0.04)
-    }
-
-    // MARK: - Content Section
-    private var contentSection: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            infoSection
-            deleteSection
-            moreFeaturesSection
+        .onAppear {
+            buildingManager.loadTemplates()
+            Task { await buildingManager.fetchPlayerBuildings(territoryId: territory.id) }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 24)
-        .padding(.bottom, 48)
+        // 每秒刷新倒计时显示
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in }
     }
 
-    // MARK: - 领地信息
-    private var infoSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("领地信息")
+    // MARK: - Info Panel
 
-            VStack(spacing: 0) {
-                infoRow(
-                    icon: "map.fill",
-                    iconColor: ApocalypseTheme.primary,
-                    label: "面积",
-                    value: territory.formattedArea
-                )
-                divider
-                infoRow(
-                    icon: "mappin.and.ellipse",
-                    iconColor: ApocalypseTheme.info,
-                    label: "路径点",
-                    value: "\(territory.pointCount ?? territory.path.count) 个"
-                )
-                divider
-                infoRow(
-                    icon: "clock.fill",
-                    iconColor: ApocalypseTheme.warning,
-                    label: "创建时间",
-                    value: territory.formattedDate
-                )
+    private var infoPanelView: some View {
+        VStack(spacing: 0) {
+            // 顶部圆角拖拽条
+            Capsule()
+                .fill(Color.white.opacity(0.25))
+                .frame(width: 36, height: 4)
+                .padding(.top, 10)
+                .padding(.bottom, 6)
+
+            ScrollView {
+                VStack(spacing: 16) {
+                    // 领地名 + 齿轮
+                    HStack {
+                        Text(territory.displayName)
+                            .font(.title3.bold())
+                            .foregroundColor(ApocalypseTheme.textPrimary)
+                        Spacer()
+                        Button(action: {
+                            renameText = territory.displayName == "未命名领地" ? "" : territory.displayName
+                            showRenameAlert = true
+                        }) {
+                            Image(systemName: "gearshape.fill")
+                                .font(.system(size: 18))
+                                .foregroundColor(ApocalypseTheme.textSecondary)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+
+                    // 信息卡片
+                    infoCard
+
+                    // 建筑列表
+                    buildingListSection
+
+                    // 错误提示
+                    if let err = actionError {
+                        Text(err)
+                            .font(.system(size: 12))
+                            .foregroundColor(ApocalypseTheme.danger)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                    }
+
+                    // 删除按钮
+                    deleteButton
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 20)
+                }
+                .padding(.top, 4)
             }
-            .background(ApocalypseTheme.cardBackground)
-            .cornerRadius(14)
+            .frame(maxHeight: UIScreen.main.bounds.height * 0.5)
         }
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(ApocalypseTheme.background.opacity(0.96))
+        )
+        .padding(.horizontal, 0)
+    }
+
+    // MARK: - Info Card
+
+    private var infoCard: some View {
+        VStack(spacing: 0) {
+            infoRow(icon: "map.fill", iconColor: ApocalypseTheme.primary,
+                    label: "面积", value: territory.formattedArea)
+            divider
+            infoRow(icon: "mappin.and.ellipse", iconColor: ApocalypseTheme.info,
+                    label: "路径点", value: "\(territory.pointCount ?? territory.path.count) 个")
+            divider
+            infoRow(icon: "clock.fill", iconColor: ApocalypseTheme.warning,
+                    label: "创建时间", value: territory.formattedDate)
+        }
+        .background(ApocalypseTheme.cardBackground)
+        .cornerRadius(14)
+        .padding(.horizontal, 16)
     }
 
     private func infoRow(icon: String, iconColor: Color, label: String, value: String) -> some View {
@@ -123,7 +217,7 @@ struct TerritoryDetailView: View {
                 .foregroundColor(ApocalypseTheme.textPrimary)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
     }
 
     private var divider: some View {
@@ -133,159 +227,137 @@ struct TerritoryDetailView: View {
             .padding(.horizontal, 16)
     }
 
-    // MARK: - 删除按钮
-    private var deleteSection: some View {
-        VStack(spacing: 8) {
-            if let error = deleteError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundColor(ApocalypseTheme.danger)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-            }
+    // MARK: - Building List
 
-            Button(action: { showDeleteAlert = true }) {
-                HStack(spacing: 8) {
-                    if isDeleting {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(0.8)
-                    } else {
-                        Image(systemName: "trash.fill")
-                            .font(.system(size: 15))
-                    }
-                    Text(isDeleting ? "删除中..." : "删除领地")
-                        .font(.system(size: 16, weight: .semibold))
-                }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(isDeleting ? ApocalypseTheme.danger.opacity(0.6) : ApocalypseTheme.danger)
-                .cornerRadius(14)
+    private var buildingListSection: some View {
+        let buildings = buildingManager.playerBuildings.filter { $0.territoryId == territory.id }
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("建筑（\(buildings.count)）")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(ApocalypseTheme.textPrimary)
+                Spacer()
             }
-            .disabled(isDeleting)
+            .padding(.horizontal, 16)
+
+            if buildings.isEmpty {
+                Text("还没有建筑，点击顶部「建造」按钮开始！")
+                    .font(.system(size: 13))
+                    .foregroundColor(ApocalypseTheme.textMuted)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(buildings) { building in
+                        if let template = buildingManager.templateDict[building.templateId] {
+                            TerritoryBuildingRow(
+                                building: building,
+                                template: template,
+                                onUpgrade: { Task { await handleUpgrade(building: building) } },
+                                onDemolish: { Task { await handleDemolish(building: building) } }
+                            )
+                            if building.id != buildings.last?.id {
+                                Rectangle()
+                                    .fill(Color.white.opacity(0.06))
+                                    .frame(height: 1)
+                                    .padding(.horizontal, 14)
+                            }
+                        }
+                    }
+                }
+                .background(ApocalypseTheme.cardBackground)
+                .cornerRadius(14)
+                .padding(.horizontal, 16)
+            }
         }
     }
 
-    // MARK: - 更多功能
-    private var moreFeaturesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("更多功能")
+    // MARK: - Delete Button
 
-            VStack(spacing: 0) {
-                featureRow(icon: "pencil", label: "重命名领地")
-                divider
-                featureRow(icon: "building.2.fill", label: "建筑系统")
-                divider
-                featureRow(icon: "arrow.left.arrow.right", label: "领地交易")
+    private var deleteButton: some View {
+        Button(action: { showDeleteAlert = true }) {
+            HStack(spacing: 8) {
+                if isDeleting {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.8)
+                } else {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 15))
+                }
+                Text(isDeleting ? "删除中..." : "删除领地")
+                    .font(.system(size: 16, weight: .semibold))
             }
-            .background(ApocalypseTheme.cardBackground)
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(isDeleting ? ApocalypseTheme.danger.opacity(0.6) : ApocalypseTheme.danger)
             .cornerRadius(14)
         }
+        .disabled(isDeleting)
     }
 
-    private func featureRow(icon: String, label: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 16))
-                .foregroundColor(ApocalypseTheme.textSecondary)
-                .frame(width: 24)
-            Text(label)
-                .font(.system(size: 15))
-                .foregroundColor(ApocalypseTheme.textPrimary)
-            Spacer()
-            Text("敬请期待")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(ApocalypseTheme.textMuted)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Color.white.opacity(0.07))
-                .cornerRadius(8)
+    // MARK: - Actions
+
+    private func performRename() async {
+        let newName = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !newName.isEmpty else { return }
+        isRenaming = true
+        do {
+            try await TerritoryManager.shared.updateTerritoryName(
+                territoryId: territory.id,
+                newName: newName
+            )
+            // 重建 Territory 以更新本地 @State
+            territory = Territory(
+                id: territory.id,
+                userId: territory.userId,
+                name: newName,
+                path: territory.path,
+                area: territory.area,
+                pointCount: territory.pointCount,
+                isActive: territory.isActive,
+                startedAt: territory.startedAt,
+                completedAt: territory.completedAt,
+                createdAt: territory.createdAt
+            )
+            NotificationCenter.default.post(name: .territoryUpdated, object: nil)
+        } catch {
+            actionError = "重命名失败：\(error.localizedDescription)"
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        isRenaming = false
     }
 
-    // MARK: - Section Header
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 16, weight: .bold))
-            .foregroundColor(ApocalypseTheme.textPrimary)
-    }
-
-    // MARK: - Delete Logic
     private func performDelete() async {
         isDeleting = true
         deleteError = nil
         do {
             try await TerritoryManager.shared.deleteTerritory(territoryId: territory.id)
+            NotificationCenter.default.post(name: .territoryDeleted, object: nil)
             onDeleted?()
             dismiss()
         } catch {
             deleteError = "删除失败: \(error.localizedDescription)"
+            actionError = deleteError
         }
         isDeleting = false
     }
-}
 
-// MARK: - TerritoryMapPreview
-
-struct TerritoryMapPreview: UIViewRepresentable {
-    let coordinates: [CLLocationCoordinate2D]
-
-    func makeUIView(context: Context) -> MKMapView {
-        let mapView = MKMapView()
-        mapView.mapType = .hybrid
-        mapView.pointOfInterestFilter = .excludingAll
-        mapView.showsBuildings = false
-        mapView.showsUserLocation = false
-        mapView.isScrollEnabled = false
-        mapView.isZoomEnabled = false
-        mapView.isRotateEnabled = false
-        mapView.isPitchEnabled = false
-        mapView.delegate = context.coordinator
-        return mapView
-    }
-
-    func updateUIView(_ uiView: MKMapView, context: Context) {
-        uiView.removeOverlays(uiView.overlays)
-        guard coordinates.count >= 3 else { return }
-
-        let gcjCoords = coordinates.map { CoordinateConverter.wgs84ToGcj02($0) }
-        let polygon = MKPolygon(coordinates: gcjCoords, count: gcjCoords.count)
-        uiView.addOverlay(polygon)
-
-        var mapRect = polygon.boundingMapRect
-        let padW = mapRect.size.width  * 0.6
-        let padH = mapRect.size.height * 0.6
-        mapRect = mapRect.insetBy(dx: -padW, dy: -padH)
-
-        let minSize = MKMapSize(width: 500, height: 500)
-        if mapRect.size.width < minSize.width || mapRect.size.height < minSize.height {
-            let cx = mapRect.midX
-            let cy = mapRect.midY
-            mapRect = MKMapRect(
-                x: cx - minSize.width / 2,
-                y: cy - minSize.height / 2,
-                width: minSize.width,
-                height: minSize.height
-            )
+    private func handleUpgrade(building: PlayerBuilding) async {
+        do {
+            try await buildingManager.upgradeBuilding(buildingId: building.id)
+            actionError = nil
+        } catch {
+            actionError = error.localizedDescription
         }
-        uiView.setVisibleMapRect(mapRect, animated: false)
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
-
-    class Coordinator: NSObject, MKMapViewDelegate {
-        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            if let polygon = overlay as? MKPolygon {
-                let renderer = MKPolygonRenderer(polygon: polygon)
-                renderer.fillColor   = UIColor.systemGreen.withAlphaComponent(0.3)
-                renderer.strokeColor = UIColor.systemGreen
-                renderer.lineWidth   = 2.5
-                return renderer
-            }
-            return MKOverlayRenderer(overlay: overlay)
+    private func handleDemolish(building: PlayerBuilding) async {
+        do {
+            try await buildingManager.demolishBuilding(buildingId: building.id)
+            actionError = nil
+        } catch {
+            actionError = error.localizedDescription
         }
     }
 }
@@ -293,26 +365,24 @@ struct TerritoryMapPreview: UIViewRepresentable {
 // MARK: - Preview
 
 #Preview {
-    NavigationStack {
-        TerritoryDetailView(
-            territory: Territory(
-                id: "abc123",
-                userId: "user1",
-                name: nil,
-                path: [
-                    ["lat": 31.2304, "lon": 121.4737],
-                    ["lat": 31.2310, "lon": 121.4750],
-                    ["lat": 31.2295, "lon": 121.4760],
-                    ["lat": 31.2285, "lon": 121.4745],
-                    ["lat": 31.2304, "lon": 121.4737]
-                ],
-                area: 12500,
-                pointCount: 5,
-                isActive: true,
-                startedAt: "2026-02-18T10:00:00Z",
-                completedAt: nil,
-                createdAt: "2026-02-18T10:05:00Z"
-            )
+    TerritoryDetailView(
+        territory: Territory(
+            id: "abc123",
+            userId: "user1",
+            name: "测试领地",
+            path: [
+                ["lat": 31.2304, "lon": 121.4737],
+                ["lat": 31.2310, "lon": 121.4750],
+                ["lat": 31.2295, "lon": 121.4760],
+                ["lat": 31.2285, "lon": 121.4745],
+                ["lat": 31.2304, "lon": 121.4737]
+            ],
+            area: 12500,
+            pointCount: 5,
+            isActive: true,
+            startedAt: "2026-02-18T10:00:00Z",
+            completedAt: nil,
+            createdAt: "2026-02-18T10:05:00Z"
         )
-    }
+    )
 }

@@ -7,6 +7,7 @@
 
 import Foundation
 import SwiftUI
+import CoreLocation
 
 // MARK: - BuildingCategory
 
@@ -39,19 +40,28 @@ enum BuildingCategory: String, Codable, CaseIterable {
 
 enum BuildingStatus: String, Codable {
     case constructing = "constructing"
+    case upgrading    = "upgrading"
     case active       = "active"
+    case inactive     = "inactive"
+    case damaged      = "damaged"
 
     var displayName: String {
         switch self {
         case .constructing: return "建造中"
+        case .upgrading:    return "升级中"
         case .active:       return "运行中"
+        case .inactive:     return "已停用"
+        case .damaged:      return "已损坏"
         }
     }
 
     var color: Color {
         switch self {
         case .constructing: return .blue
+        case .upgrading:    return .orange
         case .active:       return .green
+        case .inactive:     return .gray
+        case .damaged:      return .red
         }
     }
 }
@@ -112,6 +122,30 @@ struct PlayerBuilding: Codable, Identifiable {
     var isConstructionComplete: Bool {
         guard let completedAt = buildCompletedAt else { return false }
         return Date() >= completedAt
+    }
+
+    /// GCJ-02 坐标（直接来自 DB，无需转换）
+    var coordinate: CLLocationCoordinate2D? {
+        guard let lat = locationLat, let lon = locationLon else { return nil }
+        return CLLocationCoordinate2D(latitude: lat, longitude: lon)
+    }
+
+    /// 建造进度 0.0~1.0
+    var buildProgress: Double {
+        guard status == .constructing else { return 0 }
+        let total = buildCompletedAt?.timeIntervalSince(buildStartedAt) ?? 0
+        let elapsed = Date().timeIntervalSince(buildStartedAt)
+        return total > 0 ? min(1.0, max(0, elapsed / total)) : 0
+    }
+
+    /// 格式化剩余建造时间
+    var formattedRemainingTime: String {
+        guard status == .constructing, let completedAt = buildCompletedAt else { return "" }
+        let remaining = completedAt.timeIntervalSince(Date())
+        guard remaining > 0 else { return "即将完成" }
+        let m = Int(remaining) / 60
+        let s = Int(remaining) % 60
+        return m > 0 ? "\(m)m \(s)s" : "\(s)s"
     }
 }
 

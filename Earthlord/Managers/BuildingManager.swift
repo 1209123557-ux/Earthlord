@@ -230,6 +230,42 @@ final class BuildingManager: ObservableObject {
         logger.info("[Building] ✅ 建筑 \(buildingId) 升级至 \(building.level + 1) 级")
     }
 
+    // MARK: - 拆除建筑
+
+    func demolishBuilding(buildingId: String) async throws {
+        try await supabase
+            .from("player_buildings")
+            .delete()
+            .eq("id", value: buildingId)
+            .execute()
+        playerBuildings.removeAll { $0.id == buildingId }
+        logger.info("[Building] 拆除建筑 \(buildingId)")
+    }
+
+    // MARK: - 拉取所有建筑（主地图用）
+
+    func fetchAllPlayerBuildings() async {
+        guard let userId = AuthManager.shared.currentUser?.id else { return }
+        do {
+            let all: [PlayerBuilding] = try await supabase
+                .from("player_buildings")
+                .select()
+                .eq("user_id", value: userId.uuidString.lowercased())
+                .execute()
+                .value
+            playerBuildings = all
+            logger.info("[Building] 拉取全部建筑 \(all.count) 栋")
+        } catch {
+            logger.error("[Building] 拉取全部建筑失败: \(error)")
+        }
+    }
+
+    // MARK: - 模板字典（id → template）
+
+    var templateDict: [String: BuildingTemplate] {
+        Dictionary(uniqueKeysWithValues: buildingTemplates.map { ($0.id, $0) })
+    }
+
     // MARK: - 拉取领地建筑列表
 
     func fetchPlayerBuildings(territoryId: String) async {
