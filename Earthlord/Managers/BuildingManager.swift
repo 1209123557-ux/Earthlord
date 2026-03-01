@@ -24,6 +24,7 @@ final class BuildingManager: ObservableObject {
     @Published private(set) var playerBuildings: [PlayerBuilding] = []
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
+    @Published private(set) var buildingUpdateVersion: Int = 0
 
     /// 单个领地最多建造数量上限
     private let maxBuildingsPerTerritory = 10
@@ -134,6 +135,7 @@ final class BuildingManager: ObservableObject {
             .value
 
         playerBuildings.append(inserted)
+        buildingUpdateVersion += 1
         logger.info("[Building] ✅ 开始建造 \(template.name)，预计完成：\(formatter.string(from: completedAt))")
 
         // 倒计时后自动完成
@@ -175,6 +177,7 @@ final class BuildingManager: ObservableObject {
                     .execute()
                     .value
                 playerBuildings[idx] = updated
+                buildingUpdateVersion += 1
             }
             logger.info("[Building] ✅ 建筑 \(buildingId) 建造完成")
         } catch {
@@ -239,6 +242,7 @@ final class BuildingManager: ObservableObject {
             .eq("id", value: buildingId)
             .execute()
         playerBuildings.removeAll { $0.id == buildingId }
+        buildingUpdateVersion += 1
         logger.info("[Building] 拆除建筑 \(buildingId)")
     }
 
@@ -254,6 +258,7 @@ final class BuildingManager: ObservableObject {
                 .execute()
                 .value
             playerBuildings = all
+            buildingUpdateVersion += 1
             logger.info("[Building] 拉取全部建筑 \(all.count) 栋")
         } catch {
             logger.error("[Building] 拉取全部建筑失败: \(error)")
@@ -284,6 +289,7 @@ final class BuildingManager: ObservableObject {
                 .value
 
             playerBuildings = buildings
+            buildingUpdateVersion += 1
             logger.info("[Building] 拉取到 \(buildings.count) 栋建筑（领地 \(territoryId)）")
 
             // 自动完成已过期的 constructing 建筑

@@ -81,6 +81,8 @@ struct MapViewRepresentable: UIViewRepresentable {
     var buildings: [PlayerBuilding] = []
     /// 建筑版本号（变化时刷新标注）
     var buildingVersion: Int = 0
+    /// 建筑模板字典（用于查询 category → 图标）
+    var templateDict: [String: BuildingTemplate] = [:]
 
     // MARK: - UIViewRepresentable Methods
     func makeUIView(context: Context) -> MKMapView {
@@ -100,6 +102,9 @@ struct MapViewRepresentable: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: MKMapView, context: Context) {
+        // 同步最新 parent（含 templateDict）到 Coordinator
+        context.coordinator.parent = self
+
         // 每次更新都刷新追踪轨迹
         updateTrackingPath(uiView, context: context)
 
@@ -300,7 +305,9 @@ struct MapViewRepresentable: UIViewRepresentable {
                 view.markerTintColor = buildingAnnotation.building.status == .constructing
                     ? UIColor.systemBlue
                     : UIColor.systemOrange
-                view.glyphImage = UIImage(systemName: "building.2.fill")?.withRenderingMode(.alwaysTemplate)
+                let iconName = parent.templateDict[buildingAnnotation.building.templateId]?.category.icon
+                    ?? "building.2.fill"
+                view.glyphImage = UIImage(systemName: iconName)?.withRenderingMode(.alwaysTemplate)
                 view.titleVisibility = .adaptive
                 view.canShowCallout = true
                 return view

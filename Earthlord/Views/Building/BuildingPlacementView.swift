@@ -213,7 +213,7 @@ struct BuildingPlacementView: View {
                     Image(systemName: "hammer.fill")
                         .font(.system(size: 16))
                 }
-                Text(isBuilding ? "建造中..." : "确认建造")
+                Text(buttonLabel)
                     .font(.system(size: 16, weight: .semibold))
             }
             .foregroundColor(.white)
@@ -222,12 +222,20 @@ struct BuildingPlacementView: View {
             .background(buttonBackground)
             .cornerRadius(14)
         }
-        .disabled(!canBuild || isBuilding)
+        .disabled(!canBuild || isBuilding || selectedLocation == nil)
+    }
+
+    private var buttonLabel: String {
+        if isBuilding { return "建造中..." }
+        if selectedLocation == nil { return "请先选择位置" }
+        if !canBuild { return "资源不足" }
+        return "确认建造"
     }
 
     private var buttonBackground: Color {
         if isBuilding { return ApocalypseTheme.primary.opacity(0.6) }
-        if !canBuild  { return ApocalypseTheme.textMuted }
+        if selectedLocation == nil { return ApocalypseTheme.textMuted }
+        if !canBuild { return ApocalypseTheme.textMuted }
         return ApocalypseTheme.primary
     }
 

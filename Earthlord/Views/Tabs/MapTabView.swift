@@ -126,6 +126,7 @@ struct MapTabView: View {
             } else if locationManager.isAuthorized {
                 locationManager.startUpdatingLocation()
             }
+            buildingManager.loadTemplates()
             Task { await loadTerritories() }
             Task { await buildingManager.fetchAllPlayerBuildings() }
         }
@@ -160,7 +161,8 @@ struct MapTabView: View {
                 nearbyPOIs: explorationManager.nearbyPOIs,
                 poiVersion: explorationManager.poiVersion,
                 buildings: buildingManager.playerBuildings,
-                buildingVersion: buildingManager.playerBuildings.count
+                buildingVersion: buildingManager.buildingUpdateVersion,
+                templateDict: buildingManager.templateDict
             )
             .ignoresSafeArea()
             .colorMultiply(Color(red: 1.0, green: 0.88, blue: 0.72))

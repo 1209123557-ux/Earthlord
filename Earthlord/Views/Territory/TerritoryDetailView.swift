@@ -11,6 +11,7 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import Combine
 
 struct TerritoryDetailView: View {
     @State private var territory: Territory
