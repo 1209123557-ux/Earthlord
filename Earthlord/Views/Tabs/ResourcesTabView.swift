@@ -13,7 +13,7 @@ struct ResourcesTabView: View {
 
     // MARK: - 状态
     @State private var selectedSegment = 0
-    @State private var tradeEnabled    = false   // 交易开关（假数据，待后端）
+    @EnvironmentObject private var inventoryManager: InventoryManager
 
     // MARK: - 分段定义
     private let segments = ["POI", "背包", "已购", "领地", "交易"]
@@ -34,11 +34,6 @@ struct ResourcesTabView: View {
             .navigationTitle("资源")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    tradeToggle
-                }
-            }
         }
     }
 
@@ -71,6 +66,9 @@ struct ResourcesTabView: View {
             POIListView()
         case 1:
             BackpackView()
+        case 4:
+            TradeMainView()
+                .environmentObject(inventoryManager)
         default:
             placeholderView(title: segments[selectedSegment])
         }
@@ -100,20 +98,6 @@ struct ResourcesTabView: View {
         }
     }
 
-    // MARK: - 交易开关（右上角）
-
-    private var tradeToggle: some View {
-        HStack(spacing: 6) {
-            Text("交易")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(tradeEnabled
-                    ? ApocalypseTheme.primary
-                    : ApocalypseTheme.textMuted)
-            Toggle("", isOn: $tradeEnabled)
-                .labelsHidden()
-                .tint(ApocalypseTheme.primary)
-        }
-    }
 }
 
 // MARK: - Preview
