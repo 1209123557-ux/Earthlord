@@ -71,21 +71,22 @@ final class InventoryManager: ObservableObject {
     // AnyJSON 是 Supabase SDK 内置的 Codable & Sendable 类型，
     // 其 Encodable 协议实现由 SDK 定义，不存在 @MainActor 隔离推断。
 
-    func addItems(_ list: [(itemId: String, quantity: Int)]) async throws {
+    func addItems(_ list: [(itemId: String, quantity: Int)], reason: String = "探索") async throws {
         guard !list.isEmpty else { return }
         guard let userId = AuthManager.shared.currentUser?.id else {
             throw InventoryError.notAuthenticated
         }
 
-        logger.info("[Inventory] 开始写入 \(list.count) 种物品")
+        logger.info("[Inventory] 开始写入 \(list.count) 种物品，原因：\(reason)")
         ExplorationLogger.shared.log("🎒 添加 \(list.count) 个物品到背包")
 
-        // 调用 upsert_inventory_item RPC：有则 +N，没有则新建
+        // 调用 upsert_inventory_item RPC：有则 +N，没有则新建，同时写流水日志
         for entry in list {
             let params: [String: AnyJSON] = [
                 "p_user_id":  .string(userId.uuidString.lowercased()),
                 "p_item_id":  .string(entry.itemId),
-                "p_quantity": .integer(entry.quantity)
+                "p_quantity": .integer(entry.quantity),
+                "p_reason":   .string(reason)
             ]
             do {
                 try await supabase
@@ -104,21 +105,22 @@ final class InventoryManager: ObservableObject {
         await fetchInventory()
     }
 
-    // MARK: - Remove Items（调用 remove_inventory_item RPC 原子扣减）
+    // MARK: - Remove Items（调用 remove_inventory_item RPC 原子扣减，同时写流水日志）
 
-    func removeItem(_ itemId: String, quantity: Int) async throws {
+    func removeItem(_ itemId: String, quantity: Int, reason: String = "消耗") async throws {
         guard let userId = AuthManager.shared.currentUser?.id else {
             throw InventoryError.notAuthenticated
         }
         let params: [String: AnyJSON] = [
             "p_user_id":  .string(userId.uuidString.lowercased()),
             "p_item_id":  .string(itemId),
-            "p_quantity": .integer(quantity)
+            "p_quantity": .integer(quantity),
+            "p_reason":   .string(reason)
         ]
         try await supabase
             .rpc("remove_inventory_item", params: params)
             .execute()
-        logger.info("[Inventory] 扣减完成 itemId=\(itemId) qty=\(quantity)")
+        logger.info("[Inventory] 扣减完成 itemId=\(itemId) qty=\(quantity) 原因：\(reason)")
         await fetchInventory()
     }
 
