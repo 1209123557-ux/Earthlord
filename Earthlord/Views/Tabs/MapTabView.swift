@@ -226,10 +226,21 @@ struct MapTabView: View {
     // MARK: - Validation Result Card
     private var validationResultCard: some View {
         HStack(spacing: 12) {
-            Image(systemName: locationManager.territoryValidationPassed
-                  ? "checkmark.circle.fill"
-                  : "xmark.circle.fill")
-                .font(.title2)
+            if locationManager.territoryValidationPassed {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title2)
+            } else {
+                // 验证失败时，叉按钮可点击：清除所有状态回到地图主界面
+                Button(action: {
+                    stopCollisionMonitoring()
+                    locationManager.resetAfterUpload()
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.white)
+                }
+                .buttonStyle(.plain)
+            }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(locationManager.territoryValidationPassed ? "验证通过" : "验证失败")
