@@ -387,7 +387,7 @@ struct MapTabView: View {
                     Image(systemName: "binoculars.fill")
                         .font(.system(size: 16))
                 }
-                Text(isFinishingExploration ? "结算中..." : explorationManager.isExploring ? "结束探索" : "探索")
+                Text(isFinishingExploration ? "结算中..." : explorationManager.isExploring ? "结束探索" : "开始探索")
                     .font(.system(size: 14, weight: .semibold))
             }
             .foregroundColor(.white)
