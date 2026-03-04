@@ -18,24 +18,44 @@ struct TradeHistoryView: View {
         ZStack {
             ApocalypseTheme.background.ignoresSafeArea()
 
-            if tradeManager.isLoading && tradeManager.tradeHistory.isEmpty {
-                ProgressView()
-                    .tint(ApocalypseTheme.primary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if tradeManager.tradeHistory.isEmpty {
-                emptyState
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(tradeManager.tradeHistory) { record in
-                            HistoryCard(record: record, onRate: { rateTarget = record })
+            VStack(spacing: 0) {
+                // 读取失败提示
+                if let errMsg = tradeManager.errorMessage {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 13))
+                        Text(errMsg)
+                            .font(.system(size: 13))
+                    }
+                    .foregroundColor(ApocalypseTheme.warning)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(ApocalypseTheme.warning.opacity(0.08))
+                }
+
+                if tradeManager.isLoading && tradeManager.tradeHistory.isEmpty {
+                    Spacer()
+                    ProgressView()
+                        .tint(ApocalypseTheme.primary)
+                    Spacer()
+                } else {
+                    ScrollView {
+                        if tradeManager.tradeHistory.isEmpty {
+                            emptyState
+                        } else {
+                            LazyVStack(spacing: 12) {
+                                ForEach(tradeManager.tradeHistory) { record in
+                                    HistoryCard(record: record, onRate: { rateTarget = record })
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                }
-                .refreshable {
-                    await tradeManager.loadHistory()
+                    .refreshable {
+                        await tradeManager.loadHistory()
+                    }
                 }
             }
         }
@@ -221,6 +241,8 @@ struct RateTradeSheet: View {
     @State private var selectedRating: Int = 5
     @State private var comment: String = ""
     @State private var isSubmitting = false
+    @State private var errorMessage: String? = nil
+    @State private var showErrorAlert = false
 
     var body: some View {
         ZStack {
@@ -281,19 +303,29 @@ struct RateTradeSheet: View {
                 Spacer()
             }
         }
+        .alert("评价失败", isPresented: $showErrorAlert) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "提交失败，请重试")
+        }
     }
 
     private func submit() {
         isSubmitting = true
         Task {
-            try? await tradeManager.rateTrade(
-                historyId: record.id,
-                rating: selectedRating,
-                comment: comment.isEmpty ? nil : comment
-            )
+            do {
+                try await tradeManager.rateTrade(
+                    historyId: record.id,
+                    rating: selectedRating,
+                    comment: comment.isEmpty ? nil : comment
+                )
+                onDone()
+                dismiss()
+            } catch {
+                errorMessage = error.localizedDescription
+                showErrorAlert = true
+            }
             isSubmitting = false
-            onDone()
-            dismiss()
         }
     }
 }

@@ -16,30 +16,50 @@ struct TradeMarketView: View {
         ZStack {
             ApocalypseTheme.background.ignoresSafeArea()
 
-            if tradeManager.isLoading && tradeManager.availableOffers.isEmpty {
-                ProgressView()
-                    .tint(ApocalypseTheme.primary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if tradeManager.availableOffers.isEmpty {
-                emptyState
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(tradeManager.availableOffers) { offer in
-                            NavigationLink(destination:
-                                OfferDetailView(offer: offer)
-                                    .environmentObject(inventoryManager)
-                            ) {
-                                MarketOfferCard(offer: offer)
+            VStack(spacing: 0) {
+                // 读取失败提示
+                if let errMsg = tradeManager.errorMessage {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 13))
+                        Text(errMsg)
+                            .font(.system(size: 13))
+                    }
+                    .foregroundColor(ApocalypseTheme.warning)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(ApocalypseTheme.warning.opacity(0.08))
+                }
+
+                if tradeManager.isLoading && tradeManager.availableOffers.isEmpty {
+                    Spacer()
+                    ProgressView()
+                        .tint(ApocalypseTheme.primary)
+                    Spacer()
+                } else {
+                    ScrollView {
+                        if tradeManager.availableOffers.isEmpty {
+                            emptyState
+                        } else {
+                            LazyVStack(spacing: 12) {
+                                ForEach(tradeManager.availableOffers) { offer in
+                                    NavigationLink(destination:
+                                        OfferDetailView(offer: offer)
+                                            .environmentObject(inventoryManager)
+                                    ) {
+                                        MarketOfferCard(offer: offer)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
                             }
-                            .buttonStyle(.plain)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
-                }
-                .refreshable {
-                    await tradeManager.loadAvailableOffers()
+                    .refreshable {
+                        await tradeManager.loadAvailableOffers()
+                    }
                 }
             }
         }
@@ -68,9 +88,6 @@ struct TradeMarketView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 40)
-        .refreshable {
-            await tradeManager.loadAvailableOffers()
-        }
     }
 }
 

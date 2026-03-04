@@ -14,6 +14,8 @@ struct MyOffersView: View {
 
     @State private var cancelTargetId: String? = nil
     @State private var showCancelAlert = false
+    @State private var cancelErrorMessage: String? = nil
+    @State private var showCancelErrorAlert = false
 
     var body: some View {
         ZStack {
@@ -40,26 +42,42 @@ struct MyOffersView: View {
 
                 Divider().background(Color.white.opacity(0.07))
 
-                // 挂单列表
+                // 读取失败提示
+                if let errMsg = tradeManager.errorMessage {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 13))
+                        Text(errMsg)
+                            .font(.system(size: 13))
+                    }
+                    .foregroundColor(ApocalypseTheme.warning)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(ApocalypseTheme.warning.opacity(0.08))
+                }
+
+                // 挂单列表（空状态和非空状态都在 ScrollView 内，统一支持下拉刷新）
                 if tradeManager.isLoading && tradeManager.myOffers.isEmpty {
                     Spacer()
-                    ProgressView()
-                        .tint(ApocalypseTheme.primary)
+                    ProgressView().tint(ApocalypseTheme.primary)
                     Spacer()
-                } else if tradeManager.myOffers.isEmpty {
-                    emptyState
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(tradeManager.myOffers) { offer in
-                                OfferCard(offer: offer, onCancel: {
-                                    cancelTargetId = offer.id
-                                    showCancelAlert = true
-                                })
+                        if tradeManager.myOffers.isEmpty {
+                            emptyState
+                        } else {
+                            LazyVStack(spacing: 12) {
+                                ForEach(tradeManager.myOffers) { offer in
+                                    OfferCard(offer: offer, onCancel: {
+                                        cancelTargetId = offer.id
+                                        showCancelAlert = true
+                                    })
+                                }
                             }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 14)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
                     }
                     .refreshable {
                         await tradeManager.loadMyOffers()
@@ -73,17 +91,29 @@ struct MyOffersView: View {
         .onAppear {
             Task { await tradeManager.loadMyOffers() }
         }
+        // 取消确认弹窗
         .alert("取消挂单", isPresented: $showCancelAlert) {
             Button("确认取消", role: .destructive) {
                 guard let id = cancelTargetId else { return }
                 Task {
-                    try? await tradeManager.cancelTradeOffer(offerId: id)
+                    do {
+                        try await tradeManager.cancelTradeOffer(offerId: id)
+                    } catch {
+                        cancelErrorMessage = error.localizedDescription
+                        showCancelErrorAlert = true
+                    }
                     cancelTargetId = nil
                 }
             }
             Button("再想想", role: .cancel) { cancelTargetId = nil }
         } message: {
             Text("取消后物品将退回背包，确定要取消吗？")
+        }
+        // 取消失败弹窗
+        .alert("取消失败", isPresented: $showCancelErrorAlert) {
+            Button("确定", role: .cancel) {}
+        } message: {
+            Text(cancelErrorMessage ?? "操作失败，请重试")
         }
     }
 
