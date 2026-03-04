@@ -86,53 +86,45 @@ final class BuildingManager: ObservableObject {
             throw BuildingError.templateNotFound(templateId: templateId)
         }
 
-        // 检查资源和数量
+        // 检查资源和数量（客户端预检，减少无效 RPC 调用）
         try canBuild(template: template, territoryId: territoryId)
 
         isLoading = true
         defer { isLoading = false }
 
-        // 扣减资源
-        for (itemId, quantity) in template.requiredResources {
-            try await InventoryManager.shared.removeItem(itemId, quantity: quantity)
-        }
-
         // 计算完成时间
         let completedAt = Date().addingTimeInterval(TimeInterval(template.buildTimeSeconds))
-
-        // INSERT player_buildings
-        struct InsertPayload: Encodable {
-            let user_id: String
-            let territory_id: String
-            let template_id: String
-            let building_name: String
-            let status: String
-            let location_lat: Double?
-            let location_lon: Double?
-            let build_completed_at: String
-        }
 
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
-        let payload = InsertPayload(
-            user_id: userId.uuidString.lowercased(),
-            territory_id: territoryId,
-            template_id: templateId,
-            building_name: template.name,
-            status: BuildingStatus.constructing.rawValue,
-            location_lat: location?.latitude,
-            location_lon: location?.longitude,
-            build_completed_at: formatter.string(from: completedAt)
-        )
+        // 构建资源字典（传入 RPC）
+        let resourcesJSON: [String: AnyJSON] = template.requiredResources.reduce(into: [:]) { dict, pair in
+            dict[pair.key] = .integer(pair.value)
+        }
+
+        // 调用原子 RPC：在数据库单事务内完成「扣减资源 + 创建建筑」
+        // 若任一步骤失败，事务自动回滚，物品不会丢失
+        var params: [String: AnyJSON] = [
+            "p_user_id":            .string(userId.uuidString.lowercased()),
+            "p_territory_id":       .string(territoryId),
+            "p_template_id":        .string(templateId),
+            "p_building_name":      .string(template.name),
+            "p_resources":          .object(resourcesJSON),
+            "p_build_completed_at": .string(formatter.string(from: completedAt))
+        ]
+        if let coord = location {
+            params["p_location_lat"] = .double(coord.latitude)
+            params["p_location_lon"] = .double(coord.longitude)
+        }
 
         let inserted: PlayerBuilding = try await supabase
-            .from("player_buildings")
-            .insert(payload)
-            .select()
-            .single()
+            .rpc("start_building_construction", params: params)
             .execute()
             .value
+
+        // RPC 成功后刷新本地库存（资源已在服务器端扣减）
+        await InventoryManager.shared.fetchInventory()
 
         playerBuildings.append(inserted)
         buildingUpdateVersion += 1

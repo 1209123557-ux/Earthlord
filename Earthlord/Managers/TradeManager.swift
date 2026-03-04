@@ -43,7 +43,7 @@ final class TradeManager: ObservableObject {
         let params: [String: AnyJSON] = [
             "p_offering_items":   itemsToAnyJSON(offeringItems),
             "p_requesting_items": itemsToAnyJSON(requestingItems),
-            "p_expire_hours":     .number(Double(expireHours)),
+            "p_expire_hours":     .integer(expireHours),
             "p_message":          message.map { .string($0) } ?? .null
         ]
 
@@ -178,7 +178,7 @@ final class TradeManager: ObservableObject {
 
         let params: [String: AnyJSON] = [
             "p_history_id": .string(historyId),
-            "p_rating":     .number(Double(rating)),
+            "p_rating":     .integer(rating),
             "p_comment":    comment.map { .string($0) } ?? .null
         ]
         let result: AnyJSON = try await supabase
@@ -194,7 +194,7 @@ final class TradeManager: ObservableObject {
     /// 将 [(itemId, quantity)] 转换为 AnyJSON 数组
     private func itemsToAnyJSON(_ list: [(itemId: String, quantity: Int)]) -> AnyJSON {
         .array(list.map {
-            .object(["item_id": .string($0.itemId), "quantity": .number(Double($0.quantity))])
+            .object(["item_id": .string($0.itemId), "quantity": .integer($0.quantity)])
         })
     }
 
