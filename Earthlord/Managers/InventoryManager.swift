@@ -151,6 +151,43 @@ final class InventoryManager: ObservableObject {
 
         logger.info("[Inventory] ✅ AI 物品写入完成")
         ExplorationLogger.shared.log("🎒 AI 物品已保存（\(items.count) 件）", type: .success)
+
+        // 把 AI 物品映射到标准 item_id，合并数量后写入实际背包
+        var itemCounts: [String: Int] = [:]
+        for item in items {
+            let stdId = Self.mapAIItemToStandardId(item)
+            itemCounts[stdId, default: 0] += 1
+        }
+        let list = itemCounts.map { (itemId: $0.key, quantity: $0.value) }
+        try await addItems(list, reason: "搜刮：\(poiName)")
+    }
+
+    /// 将 AI 生成物品的 category + rarity 映射到标准 item_id
+    private static func mapAIItemToStandardId(_ item: AILootItem) -> String {
+        switch item.category {
+        case "医疗":
+            switch item.rarity {
+            case "common":    return "item_bandage"
+            case "uncommon":  return "item_medicine"
+            case "rare":      return "item_first_aid"
+            default:          return "item_antibiotic"
+            }
+        case "食物":
+            return item.rarity == "common" ? "item_biscuit" : "item_canned_food"
+        case "工具":
+            switch item.rarity {
+            case "common":    return "item_match"
+            case "uncommon":  return "item_flashlight"
+            default:          return "item_tool_kit"
+            }
+        case "材料":
+            switch item.rarity {
+            case "common":    return "item_wood"
+            case "uncommon":  return "item_rope"
+            default:          return "item_scrap_metal"
+            }
+        default:              return "item_biscuit"
+        }
     }
 
     // MARK: - Errors
