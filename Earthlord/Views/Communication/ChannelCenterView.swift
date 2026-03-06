@@ -1,4 +1,5 @@
 import SwiftUI
+import Supabase
 
 struct ChannelCenterView: View {
     @EnvironmentObject var authManager: AuthManager

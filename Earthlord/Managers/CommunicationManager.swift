@@ -180,11 +180,11 @@ final class CommunicationManager: ObservableObject {
                 .execute()
                 .value
 
-            subscribedChannels = subs.compactMap { sub in
+            self.subscribedChannels = subs.compactMap { sub in
                 guard let chan = chans.first(where: { $0.id == sub.channelId }) else { return nil }
                 return SubscribedChannel(channel: chan, subscription: sub)
             }
-            logger.info("[Channel] 加载订阅频道 \(subscribedChannels.count) 个")
+            logger.info("[Channel] 加载订阅频道 \(self.subscribedChannels.count) 个")
         } catch {
             logger.error("[Channel] 加载订阅失败: \(error.localizedDescription)")
             errorMessage = "加载订阅失败: \(error.localizedDescription)"

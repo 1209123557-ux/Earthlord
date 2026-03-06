@@ -1,4 +1,5 @@
 import SwiftUI
+import Supabase
 
 struct CreateChannelSheet: View {
     @EnvironmentObject var authManager: AuthManager
