@@ -24,6 +24,7 @@ struct RootView: View {
             } else if authManager.isAuthenticated {
                 // 已登录 → 主界面
                 MainTabView()
+                    .environmentObject(authManager)
                     .transition(.opacity)
             } else {
                 // 未登录 → 认证页
