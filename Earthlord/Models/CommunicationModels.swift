@@ -129,7 +129,7 @@ enum ChannelType: String, Codable, CaseIterable {
         switch self {
         case .official:  return "megaphone.fill"
         case .public:    return "globe"
-        case .walkie:    return "walkie.talkie.radio"
+        case .walkie:    return "phone.badge.waveform"
         case .camp:      return "antenna.radiowaves.left.and.right"
         case .satellite: return "antenna.radiowaves.left.and.right.circle"
         }
@@ -198,4 +198,114 @@ struct SubscribedChannel: Identifiable {
     var id: UUID { channel.id }
     let channel: CommunicationChannel
     let subscription: ChannelSubscription
+}
+
+// MARK: - 位置点模型（解析 PostGIS POINT）
+
+struct LocationPoint: Codable {
+    let latitude: Double
+    let longitude: Double
+
+    // 从 PostGIS WKT 格式解析：POINT(经度 纬度)
+    static func fromPostGIS(_ wkt: String) -> LocationPoint? {
+        let pattern = #"POINT\(([0-9.-]+)\s+([0-9.-]+)\)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: wkt, range: NSRange(wkt.startIndex..., in: wkt)),
+              let lonRange = Range(match.range(at: 1), in: wkt),
+              let latRange = Range(match.range(at: 2), in: wkt),
+              let longitude = Double(wkt[lonRange]),
+              let latitude = Double(wkt[latRange]) else {
+            return nil
+        }
+        return LocationPoint(latitude: latitude, longitude: longitude)
+    }
+}
+
+// MARK: - 消息元数据
+
+struct MessageMetadata: Codable {
+    let deviceType: String?
+
+    enum CodingKeys: String, CodingKey {
+        case deviceType = "device_type"
+    }
+}
+
+// MARK: - 频道消息模型
+
+struct ChannelMessage: Codable, Identifiable {
+    let messageId: UUID
+    let channelId: UUID
+    let senderId: UUID?
+    let senderCallsign: String?
+    let content: String
+    let senderLocation: LocationPoint?
+    let metadata: MessageMetadata?
+    let createdAt: Date
+
+    var id: UUID { messageId }
+
+    enum CodingKeys: String, CodingKey {
+        case messageId      = "message_id"
+        case channelId      = "channel_id"
+        case senderId       = "sender_id"
+        case senderCallsign = "sender_callsign"
+        case content
+        case senderLocation = "sender_location"
+        case metadata
+        case createdAt      = "created_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        messageId       = try container.decode(UUID.self, forKey: .messageId)
+        channelId       = try container.decode(UUID.self, forKey: .channelId)
+        senderId        = try container.decodeIfPresent(UUID.self, forKey: .senderId)
+        senderCallsign  = try container.decodeIfPresent(String.self, forKey: .senderCallsign)
+        content         = try container.decode(String.self, forKey: .content)
+        metadata        = try container.decodeIfPresent(MessageMetadata.self, forKey: .metadata)
+
+        // 解析位置（PostGIS 返回 WKT 字符串）
+        if let wkt = try? container.decode(String.self, forKey: .senderLocation) {
+            senderLocation = LocationPoint.fromPostGIS(wkt)
+        } else {
+            senderLocation = try container.decodeIfPresent(LocationPoint.self, forKey: .senderLocation)
+        }
+
+        // 解析日期（兼容多种格式）
+        if let dateString = try? container.decode(String.self, forKey: .createdAt) {
+            createdAt = ChannelMessage.parseDate(dateString) ?? Date()
+        } else {
+            createdAt = try container.decode(Date.self, forKey: .createdAt)
+        }
+    }
+
+    private static func parseDate(_ string: String) -> Date? {
+        let formats = [
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXXXX",
+            "yyyy-MM-dd'T'HH:mm:ssXXXXX",
+            "yyyy-MM-dd'T'HH:mm:ss"
+        ]
+        for format in formats {
+            let formatter = DateFormatter()
+            formatter.dateFormat = format
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            if let date = formatter.date(from: string) { return date }
+        }
+        return nil
+    }
+
+    var timeAgo: String {
+        let interval = Date().timeIntervalSince(createdAt)
+        if interval < 60 { return "刚刚" }
+        if interval < 3600 { return "\(Int(interval / 60))分钟前" }
+        if interval < 86400 { return "\(Int(interval / 3600))小时前" }
+        let f = DateFormatter()
+        f.dateFormat = "MM-dd HH:mm"
+        return f.string(from: createdAt)
+    }
+
+    var deviceType: String? { metadata?.deviceType }
 }

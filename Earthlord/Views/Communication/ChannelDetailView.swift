@@ -99,6 +99,22 @@ struct ChannelDetailView: View {
                         }
                     }
 
+                    // 进入聊天（已订阅才能进入）
+                    if isSubscribed {
+                        NavigationLink(destination:
+                            ChannelChatView(channel: channel)
+                                .environmentObject(authManager)
+                        ) {
+                            Label("进入频道聊天", systemImage: "bubble.left.and.bubble.right.fill")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(ApocalypseTheme.primary)
+                                .cornerRadius(12)
+                        }
+                    }
+
                     // 操作按钮
                     if isOwner {
                         // 创建者：删除
