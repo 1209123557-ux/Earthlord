@@ -368,7 +368,7 @@ final class CommunicationManager: ObservableObject {
         logger.info("[Realtime] 消息订阅已停止")
     }
 
-    private func handleNewMessage(insertion: some PostgresAction) async {
+    private func handleNewMessage(insertion: InsertAction) async {
         do {
             let message = try insertion.decodeRecord(as: ChannelMessage.self, decoder: JSONDecoder())
             guard subscribedChannelIds.contains(message.channelId) else { return }
