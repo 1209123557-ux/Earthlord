@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreLocation
 import Supabase
 
 struct ChannelChatView: View {
