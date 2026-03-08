@@ -207,10 +207,13 @@ struct ChannelChatView: View {
         guard !text.isEmpty else { return }
         isSending = true
         let deviceType = communicationManager.getCurrentDeviceType().rawValue
+        let coord = LocationManager.shared.userLocation
         Task {
             let success = await communicationManager.sendChannelMessage(
                 channelId: channel.id,
                 content: text,
+                latitude: coord?.latitude,
+                longitude: coord?.longitude,
                 deviceType: deviceType
             )
             if success { inputText = "" }

@@ -12,6 +12,8 @@ import Combine  // ⚠️ @Published 需要这个框架
 // MARK: - LocationManager
 /// GPS 定位管理器，负责处理定位权限和位置更新
 class LocationManager: NSObject, ObservableObject {
+    static let shared = LocationManager()
+
     // MARK: - Published Properties
     /// 用户当前位置（经纬度）
     @Published var userLocation: CLLocationCoordinate2D?

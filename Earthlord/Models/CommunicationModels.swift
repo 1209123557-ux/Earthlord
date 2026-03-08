@@ -241,6 +241,7 @@ struct ChannelMessage: Codable, Identifiable {
     let content: String
     let senderLocation: LocationPoint?
     let metadata: MessageMetadata?
+    let senderDeviceType: DeviceType?
     let createdAt: Date
 
     var id: UUID { messageId }
@@ -251,9 +252,10 @@ struct ChannelMessage: Codable, Identifiable {
         case senderId       = "sender_id"
         case senderCallsign = "sender_callsign"
         case content
-        case senderLocation = "sender_location"
+        case senderLocation    = "sender_location"
         case metadata
-        case createdAt      = "created_at"
+        case senderDeviceType  = "sender_device_type"
+        case createdAt         = "created_at"
     }
 
     init(from decoder: Decoder) throws {
@@ -278,6 +280,16 @@ struct ChannelMessage: Codable, Identifiable {
             createdAt = ChannelMessage.parseDate(dateString) ?? Date()
         } else {
             createdAt = try container.decode(Date.self, forKey: .createdAt)
+        }
+
+        // 解析发送者设备类型（优先读专用字段，回退到 metadata）
+        if let raw = try? container.decode(String.self, forKey: .senderDeviceType),
+           let dt = DeviceType(rawValue: raw) {
+            senderDeviceType = dt
+        } else if let dtStr = metadata?.deviceType, let dt = DeviceType(rawValue: dtStr) {
+            senderDeviceType = dt
+        } else {
+            senderDeviceType = nil
         }
     }
 
