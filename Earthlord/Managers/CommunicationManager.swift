@@ -417,6 +417,77 @@ final class CommunicationManager: ObservableObject {
         channelMessages[channelId] ?? []
     }
 
+    // MARK: - 官方频道
+
+    static let officialChannelId = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+
+    func isOfficialChannel(_ channelId: UUID) -> Bool {
+        channelId == CommunicationManager.officialChannelId
+    }
+
+    func ensureOfficialChannelSubscribed(userId: UUID) async {
+        let officialId = CommunicationManager.officialChannelId
+        if subscribedChannels.contains(where: { $0.channel.id == officialId }) { return }
+        do {
+            let params: [String: AnyJSON] = [
+                "p_user_id":    .string(userId.uuidString.lowercased()),
+                "p_channel_id": .string(officialId.uuidString.lowercased())
+            ]
+            try await supabase.rpc("subscribe_to_channel", params: params).execute()
+            await loadSubscribedChannels(userId: userId)
+            logger.info("[官方频道] 已自动订阅")
+        } catch {
+            logger.error("[官方频道] 订阅失败: \(error)")
+        }
+    }
+
+    // MARK: - 消息聚合
+
+    struct ChannelSummary: Identifiable {
+        let channel: CommunicationChannel
+        let lastMessage: ChannelMessage?
+        let unreadCount: Int
+        var id: UUID { channel.id }
+    }
+
+    func getChannelSummaries() -> [ChannelSummary] {
+        subscribedChannels.map { sub in
+            let msgs = channelMessages[sub.channel.id] ?? []
+            return ChannelSummary(channel: sub.channel, lastMessage: msgs.last, unreadCount: 0)
+        }.sorted { a, b in
+            if a.channel.channelType == .official && b.channel.channelType != .official { return true }
+            if a.channel.channelType != .official && b.channel.channelType == .official { return false }
+            let t1 = a.lastMessage?.createdAt ?? a.channel.createdAt
+            let t2 = b.lastMessage?.createdAt ?? b.channel.createdAt
+            return t1 > t2
+        }
+    }
+
+    func loadAllChannelLatestMessages() async {
+        for sub in subscribedChannels {
+            let channelId = sub.channel.id
+            do {
+                let messages: [ChannelMessage] = try await supabase
+                    .from("channel_messages")
+                    .select()
+                    .eq("channel_id", value: channelId.uuidString)
+                    .order("created_at", ascending: false)
+                    .limit(1)
+                    .execute()
+                    .value
+                if let msg = messages.first {
+                    if channelMessages[channelId] == nil {
+                        channelMessages[channelId] = [msg]
+                    } else if !(channelMessages[channelId]!.contains(where: { $0.id == msg.id })) {
+                        channelMessages[channelId]?.append(msg)
+                    }
+                }
+            } catch {
+                logger.error("[消息聚合] 加载频道 \(channelId) 失败: \(error)")
+            }
+        }
+    }
+
     // MARK: - 距离过滤
 
     /// 保守策略主入口：信息缺失时一律显示消息

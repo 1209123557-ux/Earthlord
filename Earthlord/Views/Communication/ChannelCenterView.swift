@@ -55,22 +55,28 @@ struct ChannelCenterView: View {
                 }
         }
         .sheet(item: $selectedChannel) { channel in
-            ChannelDetailView(channel: channel)
-                .environmentObject(authManager)
-                .onDisappear {
-                    if let userId = authManager.currentUser?.id {
-                        Task {
-                            await communicationManager.loadPublicChannels()
-                            await communicationManager.loadSubscribedChannels(userId: userId)
+            if channel.channelType == .official {
+                OfficialChannelDetailView(channel: channel)
+                    .environmentObject(authManager)
+            } else {
+                ChannelDetailView(channel: channel)
+                    .environmentObject(authManager)
+                    .onDisappear {
+                        if let userId = authManager.currentUser?.id {
+                            Task {
+                                await communicationManager.loadPublicChannels()
+                                await communicationManager.loadSubscribedChannels(userId: userId)
+                            }
                         }
                     }
-                }
+            }
         }
         .onAppear {
             if let userId = authManager.currentUser?.id {
                 Task {
                     await communicationManager.loadPublicChannels()
                     await communicationManager.loadSubscribedChannels(userId: userId)
+                    await communicationManager.ensureOfficialChannelSubscribed(userId: userId)
                 }
             }
         }

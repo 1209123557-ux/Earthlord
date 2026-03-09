@@ -6,6 +6,7 @@ struct DeviceManagementView: View {
     @ObservedObject private var authManager = AuthManager.shared
     @State private var showUnlockAlert = false
     @State private var selectedDeviceForUnlock: DeviceType?
+    @State private var showingCallsignSettings = false
 
     var body: some View {
         ScrollView {
@@ -35,11 +36,46 @@ struct DeviceManagementView: View {
                     ForEach(DeviceType.allCases, id: \.self) { deviceType in
                         deviceCard(deviceType)
                     }
+
+                    Divider()
+                        .background(ApocalypseTheme.textSecondary.opacity(0.2))
+                        .padding(.vertical, 4)
+
+                    Button(action: { showingCallsignSettings = true }) {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Circle()
+                                    .fill(ApocalypseTheme.primary.opacity(0.15))
+                                    .frame(width: 50, height: 50)
+                                Image(systemName: "antenna.radiowaves.left.and.right")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(ApocalypseTheme.primary)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("呼号设置")
+                                    .font(.subheadline).fontWeight(.medium)
+                                    .foregroundColor(ApocalypseTheme.textPrimary)
+                                Text("设置在频道中显示的通讯标识")
+                                    .font(.caption)
+                                    .foregroundColor(ApocalypseTheme.textSecondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(ApocalypseTheme.textSecondary)
+                        }
+                        .padding(12)
+                        .background(ApocalypseTheme.cardBackground)
+                        .cornerRadius(10)
+                    }
                 }
             }
             .padding(16)
         }
         .background(ApocalypseTheme.background)
+        .sheet(isPresented: $showingCallsignSettings) {
+            CallsignSettingsSheet()
+        }
         .alert("设备未解锁", isPresented: $showUnlockAlert) {
             Button("确定", role: .cancel) {}
         } message: {

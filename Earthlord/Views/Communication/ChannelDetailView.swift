@@ -12,7 +12,8 @@ struct ChannelDetailView: View {
     @State private var isProcessing = false
 
     private var isOwner: Bool {
-        authManager.currentUser?.id == channel.creatorId
+        guard let creatorId = channel.creatorId else { return false }
+        return authManager.currentUser?.id == creatorId
     }
 
     private var isSubscribed: Bool {
