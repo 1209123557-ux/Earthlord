@@ -25,26 +25,6 @@ struct StoreView: View {
 
             if purchaseManager.isLoading {
                 loadingView
-            } else if let loadError = purchaseManager.purchaseError, purchaseManager.products.isEmpty {
-                // 商品加载失败时显示具体错误，方便排查
-                VStack(spacing: 16) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(ApocalypseTheme.warning)
-                    Text("商品加载失败")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(ApocalypseTheme.textPrimary)
-                    Text(loadError)
-                        .font(.system(size: 12))
-                        .foregroundColor(ApocalypseTheme.textMuted)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-                    Button("重试") {
-                        Task { await purchaseManager.reloadProducts() }
-                    }
-                    .foregroundColor(ApocalypseTheme.primary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     VStack(spacing: 20) {
