@@ -15,8 +15,7 @@ struct ResourcesTabView: View {
     @EnvironmentObject private var inventoryManager: InventoryManager
 
     // MARK: - 分段定义
-    private let segments = ["POI", "背包", "商城", "邮箱", "领地", "交易"]
-    @StateObject private var mailboxManager = MailboxManager.shared
+    private let segments = ["POI", "背包", "商城", "领地", "交易"]
 
     // MARK: - Body
     var body: some View {
@@ -34,7 +33,6 @@ struct ResourcesTabView: View {
             .navigationTitle("资源")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
-            .task { await mailboxManager.fetchMailbox() }
         }
     }
 
@@ -43,12 +41,7 @@ struct ResourcesTabView: View {
     private var segmentedPicker: some View {
         Picker("", selection: $selectedSegment) {
             ForEach(0..<segments.count, id: \.self) { idx in
-                // 邮箱 tab（index 3）有未读时在文字后加红点
-                if idx == 3 && mailboxManager.unclaimedCount > 0 {
-                    Text("邮箱 ●").tag(idx)
-                } else {
-                    Text(segments[idx]).tag(idx)
-                }
+                Text(segments[idx]).tag(idx)
             }
         }
         .pickerStyle(.segmented)
@@ -74,9 +67,7 @@ struct ResourcesTabView: View {
             BackpackView()
         case 2:
             StoreView()
-        case 3:
-            MailboxView()
-        case 5:
+        case 4:
             TradeMainView()
                 .environmentObject(inventoryManager)
         default:

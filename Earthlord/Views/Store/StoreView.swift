@@ -11,11 +11,13 @@ import StoreKit
 struct StoreView: View {
 
     @StateObject private var purchaseManager = PurchaseManager.shared
+    @StateObject private var mailboxManager = MailboxManager.shared
     @EnvironmentObject private var inventoryManager: InventoryManager
     @State private var purchasingId: String? = nil
     @State private var showSuccessAlert = false
     @State private var showErrorAlert = false
     @State private var alertMessage = ""
+    @State private var showMailbox = false
 
     var body: some View {
         ZStack {
@@ -64,7 +66,30 @@ struct StoreView: View {
         .navigationTitle("末日商城")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
-        .task { await purchaseManager.loadProducts() }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: { showMailbox = true }) {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "envelope.fill")
+                            .font(.system(size: 17))
+                            .foregroundColor(ApocalypseTheme.textSecondary)
+                        if mailboxManager.unclaimedCount > 0 {
+                            Circle()
+                                .fill(ApocalypseTheme.danger)
+                                .frame(width: 8, height: 8)
+                                .offset(x: 4, y: -4)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationDestination(isPresented: $showMailbox) {
+            MailboxView()
+        }
+        .task {
+            await purchaseManager.loadProducts()
+            await mailboxManager.fetchMailbox()
+        }
         .alert("购买成功", isPresented: $showSuccessAlert) {
             Button("去邮箱领取", role: .none) { }
         } message: {
