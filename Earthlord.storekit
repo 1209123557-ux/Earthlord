@@ -1,0 +1,147 @@
+{
+  "identifier" : "Earthlord",
+  "nonConsumableProducts" : [
+
+  ],
+  "consumableProducts" : [
+    {
+      "displayPrice" : "6.00",
+      "familySharable" : false,
+      "internalID" : "com.earthlord.supply.survivor",
+      "localizations" : [
+        {
+          "description" : "幸存者补给包：基础生存物资，解决燃眉之急",
+          "displayName" : "幸存者补给包",
+          "locale" : "zh_CN"
+        }
+      ],
+      "productID" : "com.earthlord.supply.survivor",
+      "referenceName" : "幸存者补给包",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "18.00",
+      "familySharable" : false,
+      "internalID" : "com.earthlord.supply.explorer",
+      "localizations" : [
+        {
+          "description" : "探索者物资包：生存物资+稀有装备，性价比之选",
+          "displayName" : "探索者物资包",
+          "locale" : "zh_CN"
+        }
+      ],
+      "productID" : "com.earthlord.supply.explorer",
+      "referenceName" : "探索者物资包",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "30.00",
+      "familySharable" : false,
+      "internalID" : "com.earthlord.supply.lord",
+      "localizations" : [
+        {
+          "description" : "领主物资包：大量物资+高级装备，快速发展",
+          "displayName" : "领主物资包",
+          "locale" : "zh_CN"
+        }
+      ],
+      "productID" : "com.earthlord.supply.lord",
+      "referenceName" : "领主物资包",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "68.00",
+      "familySharable" : false,
+      "internalID" : "com.earthlord.supply.overlord",
+      "localizations" : [
+        {
+          "description" : "末日霸主包：海量资源+稀有物品，一步到位",
+          "displayName" : "末日霸主包",
+          "locale" : "zh_CN"
+        }
+      ],
+      "productID" : "com.earthlord.supply.overlord",
+      "referenceName" : "末日霸主包",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "6.00",
+      "familySharable" : false,
+      "internalID" : "com.earthlord.bag.small",
+      "localizations" : [
+        {
+          "description" : "背包扩容·小：永久增加50格背包空间",
+          "displayName" : "背包扩容·小",
+          "locale" : "zh_CN"
+        }
+      ],
+      "productID" : "com.earthlord.bag.small",
+      "referenceName" : "背包扩容小",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "18.00",
+      "familySharable" : false,
+      "internalID" : "com.earthlord.bag.medium",
+      "localizations" : [
+        {
+          "description" : "背包扩容·中：永久增加150格背包空间",
+          "displayName" : "背包扩容·中",
+          "locale" : "zh_CN"
+        }
+      ],
+      "productID" : "com.earthlord.bag.medium",
+      "referenceName" : "背包扩容中",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "45.00",
+      "familySharable" : false,
+      "internalID" : "com.earthlord.bag.large",
+      "localizations" : [
+        {
+          "description" : "背包扩容·大：永久增加400格背包空间",
+          "displayName" : "背包扩容·大",
+          "locale" : "zh_CN"
+        }
+      ],
+      "productID" : "com.earthlord.bag.large",
+      "referenceName" : "背包扩容大",
+      "type" : "Consumable"
+    }
+  ],
+  "autoRenewableSubscriptions" : [
+
+  ],
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "settings" : {
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Purchase"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Verify Receipts"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Store Sync"
+      }
+    ]
+  },
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

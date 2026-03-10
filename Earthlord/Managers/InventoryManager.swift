@@ -30,7 +30,12 @@ final class InventoryManager: ObservableObject {
 
     /// 背包中所有物品的总件数（用于容量显示）
     var totalCount: Int { items.reduce(0) { $0 + $1.quantity } }
-    let maxCapacity = 100
+
+    /// 基础容量 100 + 购买的扩容量
+    var maxCapacity: Int { 100 + expansionCapacity }
+
+    /// 已购买的额外容量（从 bag_expansions 表读取）
+    @Published private(set) var expansionCapacity: Int = 0
 
     // MARK: - Fetch
 
@@ -39,6 +44,7 @@ final class InventoryManager: ObservableObject {
         ExplorationLogger.shared.log("加载背包")
         isLoading = true
         errorMessage = nil
+        await fetchExpansionCapacity()
         do {
             let rows: [InventoryRow] = try await supabase
                 .from("inventory_items")
@@ -187,6 +193,30 @@ final class InventoryManager: ObservableObject {
             default:          return "item_scrap_metal"
             }
         default:              return "item_biscuit"
+        }
+    }
+
+    // MARK: - Expansion Capacity
+
+    func fetchExpansionCapacity() async {
+        guard let userId = AuthManager.shared.currentUser?.id else { return }
+        do {
+            struct ExpansionRow: Decodable {
+                let extraCapacity: Int
+                enum CodingKeys: String, CodingKey {
+                    case extraCapacity = "extra_capacity"
+                }
+            }
+            let rows: [ExpansionRow] = try await supabase
+                .from("bag_expansions")
+                .select("extra_capacity")
+                .eq("user_id", value: userId.uuidString.lowercased())
+                .execute()
+                .value
+            expansionCapacity = rows.first?.extraCapacity ?? 0
+            logger.info("[Inventory] 扩容容量: +\(self.expansionCapacity)")
+        } catch {
+            logger.error("[Inventory] 扩容容量加载失败: \(error.localizedDescription)")
         }
     }
 

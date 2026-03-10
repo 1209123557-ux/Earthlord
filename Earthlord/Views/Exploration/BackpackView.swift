@@ -37,8 +37,11 @@ struct BackpackView: View {
 
     // MARK: - 状态
     @EnvironmentObject private var inventoryManager: InventoryManager
+    @StateObject private var mailboxManager = MailboxManager.shared
     @State private var searchText = ""
     @State private var selectedCategory = "全部"
+    @State private var showStore = false
+    @State private var showMailbox = false
 
     // MARK: - 筛选分类（标签 + 图标）
     private let filterCategories: [(label: String, icon: String)] = [
@@ -95,8 +98,42 @@ struct BackpackView: View {
         .navigationTitle("背包")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar {
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                // 邮箱入口（有未领取时显示红点）
+                Button(action: { showMailbox = true }) {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "envelope.fill")
+                            .font(.system(size: 17))
+                            .foregroundColor(ApocalypseTheme.textSecondary)
+                        if mailboxManager.unclaimedCount > 0 {
+                            Circle()
+                                .fill(ApocalypseTheme.danger)
+                                .frame(width: 8, height: 8)
+                                .offset(x: 4, y: -4)
+                        }
+                    }
+                }
+
+                // 商城入口
+                Button(action: { showStore = true }) {
+                    Image(systemName: "storefront.fill")
+                        .font(.system(size: 17))
+                        .foregroundColor(ApocalypseTheme.primary)
+                }
+            }
+        }
+        .navigationDestination(isPresented: $showStore) {
+            StoreView()
+        }
+        .navigationDestination(isPresented: $showMailbox) {
+            MailboxView()
+        }
         .onAppear {
-            Task { await inventoryManager.fetchInventory() }
+            Task {
+                await inventoryManager.fetchInventory()
+                await mailboxManager.fetchMailbox()
+            }
         }
     }
 
