@@ -3,8 +3,7 @@
 //  Earthlord
 //
 //  资源模块主入口 Tab
-//  分段选择器：POI / 背包 / 已购 / 领地 / 交易
-//  POI 和 背包 分段显示对应子页面，其余显示占位文字
+//  分段选择器：POI / 背包 / 商城 / 邮箱 / 领地 / 交易
 //
 
 import SwiftUI
@@ -16,7 +15,8 @@ struct ResourcesTabView: View {
     @EnvironmentObject private var inventoryManager: InventoryManager
 
     // MARK: - 分段定义
-    private let segments = ["POI", "背包", "已购", "领地", "交易"]
+    private let segments = ["POI", "背包", "商城", "邮箱", "领地", "交易"]
+    @StateObject private var mailboxManager = MailboxManager.shared
 
     // MARK: - Body
     var body: some View {
@@ -34,6 +34,7 @@ struct ResourcesTabView: View {
             .navigationTitle("资源")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .task { await mailboxManager.fetchMailbox() }
         }
     }
 
@@ -42,7 +43,12 @@ struct ResourcesTabView: View {
     private var segmentedPicker: some View {
         Picker("", selection: $selectedSegment) {
             ForEach(0..<segments.count, id: \.self) { idx in
-                Text(segments[idx]).tag(idx)
+                // 邮箱 tab（index 3）有未读时在文字后加红点
+                if idx == 3 && mailboxManager.unclaimedCount > 0 {
+                    Text("邮箱 ●").tag(idx)
+                } else {
+                    Text(segments[idx]).tag(idx)
+                }
             }
         }
         .pickerStyle(.segmented)
@@ -66,7 +72,11 @@ struct ResourcesTabView: View {
             POIListView()
         case 1:
             BackpackView()
-        case 4:
+        case 2:
+            StoreView()
+        case 3:
+            MailboxView()
+        case 5:
             TradeMainView()
                 .environmentObject(inventoryManager)
         default:
