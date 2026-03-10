@@ -76,31 +76,6 @@ final class PurchaseManager: ObservableObject {
         isLoading = false
     }
 
-    // MARK: - Debug Mock Purchase（无需 StoreKit，仅用于开发测试）
-
-    #if DEBUG
-    func debugMockPurchase(productId: String) async {
-        guard !isPurchasing else { return }
-        isPurchasing = true
-        purchaseError = nil
-        logger.info("[Purchase][DEBUG] 模拟购买: \(productId)")
-
-        guard let userId = AuthManager.shared.currentUser?.id else {
-            purchaseError = "未登录"
-            isPurchasing = false
-            return
-        }
-
-        if let pack = PackCatalog.find(productId) {
-            await grantPackToMailbox(userId: userId, pack: pack, transactionId: "debug_\(UUID().uuidString)")
-        } else if let expansion = BagExpansionCatalog.find(productId) {
-            await applyBagExpansion(userId: userId, expansion: expansion)
-        }
-
-        isPurchasing = false
-    }
-    #endif
-
     // MARK: - Purchase
 
     func purchase(_ product: Product) async {

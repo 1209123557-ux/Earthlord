@@ -150,15 +150,9 @@ struct StoreView: View {
     // MARK: - Buy Actions
 
     private func buyPack(_ pack: PackDefinition) async {
+        guard let product = purchaseManager.product(for: pack.productId) else { return }
         purchasingId = pack.productId
-        #if DEBUG
-        await purchaseManager.debugMockPurchase(productId: pack.productId)
-        #else
-        guard let product = purchaseManager.product(for: pack.productId) else {
-            purchasingId = nil; return
-        }
         await purchaseManager.purchase(product)
-        #endif
         purchasingId = nil
 
         if let error = purchaseManager.purchaseError {
@@ -171,15 +165,9 @@ struct StoreView: View {
     }
 
     private func buyExpansion(_ expansion: BagExpansionProduct) async {
+        guard let product = purchaseManager.product(for: expansion.productId) else { return }
         purchasingId = expansion.productId
-        #if DEBUG
-        await purchaseManager.debugMockPurchase(productId: expansion.productId)
-        #else
-        guard let product = purchaseManager.product(for: expansion.productId) else {
-            purchasingId = nil; return
-        }
         await purchaseManager.purchase(product)
-        #endif
         purchasingId = nil
 
         if let error = purchaseManager.purchaseError {

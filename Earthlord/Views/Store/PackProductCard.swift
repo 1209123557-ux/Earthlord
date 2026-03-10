@@ -151,11 +151,7 @@ struct PackProductCard: View {
             .cornerRadius(12)
         }
         .buttonStyle(.plain)
-        #if DEBUG
-        .disabled(isPurchasing)
-        #else
         .disabled(isPurchasing || product == nil)
-        #endif
     }
 }
 
@@ -210,11 +206,7 @@ struct BagExpansionCard: View {
                     .cornerRadius(10)
                 }
                 .buttonStyle(.plain)
-                #if DEBUG
-                .disabled(isPurchasing)
-                #else
                 .disabled(isPurchasing || product == nil)
-                #endif
             }
         }
     }
