@@ -51,17 +51,55 @@ final class PurchaseManager: ObservableObject {
 
     func loadProducts() async {
         guard products.isEmpty else { return }
+        await fetchProducts()
+    }
+
+    func reloadProducts() async {
+        products = []
+        await fetchProducts()
+    }
+
+    private func fetchProducts() async {
         isLoading = true
+        purchaseError = nil
         do {
-            products = try await Product.products(for: allProductIds)
-            products.sort { $0.price < $1.price }
+            let fetched = try await Product.products(for: allProductIds)
+            products = fetched.sorted { $0.price < $1.price }
             logger.info("[Purchase] 商品加载完成，共 \(self.products.count) 个")
+            if products.isEmpty {
+                purchaseError = "未找到任何商品（已请求 \(self.allProductIds.count) 个 ID）。\n请确认 Scheme → Options → StoreKit Configuration 已选择 Earthlord.storekit"
+            }
         } catch {
             logger.error("[Purchase] 商品加载失败: \(error.localizedDescription)")
-            purchaseError = "商品加载失败：\(error.localizedDescription)"
+            purchaseError = error.localizedDescription
         }
         isLoading = false
     }
+
+    // MARK: - Debug Mock Purchase（无需 StoreKit，仅用于开发测试）
+
+    #if DEBUG
+    func debugMockPurchase(productId: String) async {
+        guard !isPurchasing else { return }
+        isPurchasing = true
+        purchaseError = nil
+        logger.info("[Purchase][DEBUG] 模拟购买: \(productId)")
+
+        guard let userId = AuthManager.shared.currentUser?.id else {
+            purchaseError = "未登录"
+            isPurchasing = false
+            return
+        }
+
+        if let pack = PackCatalog.find(productId) {
+            await grantPackToMailbox(userId: userId, pack: pack, transactionId: "debug_\(UUID().uuidString)")
+        } else if let expansion = BagExpansionCatalog.find(productId) {
+            await applyBagExpansion(userId: userId, expansion: expansion)
+        }
+
+        isPurchasing = false
+    }
+    #endif
 
     // MARK: - Purchase
 

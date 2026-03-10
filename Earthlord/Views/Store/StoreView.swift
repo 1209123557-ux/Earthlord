@@ -25,6 +25,26 @@ struct StoreView: View {
 
             if purchaseManager.isLoading {
                 loadingView
+            } else if let loadError = purchaseManager.purchaseError, purchaseManager.products.isEmpty {
+                // 商品加载失败时显示具体错误，方便排查
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 40))
+                        .foregroundColor(ApocalypseTheme.warning)
+                    Text("商品加载失败")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(ApocalypseTheme.textPrimary)
+                    Text(loadError)
+                        .font(.system(size: 12))
+                        .foregroundColor(ApocalypseTheme.textMuted)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                    Button("重试") {
+                        Task { await purchaseManager.reloadProducts() }
+                    }
+                    .foregroundColor(ApocalypseTheme.primary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
                     VStack(spacing: 20) {
@@ -150,24 +170,36 @@ struct StoreView: View {
     // MARK: - Buy Actions
 
     private func buyPack(_ pack: PackDefinition) async {
-        guard let product = purchaseManager.product(for: pack.productId) else { return }
         purchasingId = pack.productId
+        #if DEBUG
+        await purchaseManager.debugMockPurchase(productId: pack.productId)
+        #else
+        guard let product = purchaseManager.product(for: pack.productId) else {
+            purchasingId = nil; return
+        }
         await purchaseManager.purchase(product)
+        #endif
         purchasingId = nil
 
         if let error = purchaseManager.purchaseError {
             alertMessage = error
             showErrorAlert = true
         } else {
-            alertMessage = "物品已发送到您的邮箱，请在背包页面打开邮箱领取"
+            alertMessage = "物品已发送到您的邮箱，请打开邮箱领取"
             showSuccessAlert = true
         }
     }
 
     private func buyExpansion(_ expansion: BagExpansionProduct) async {
-        guard let product = purchaseManager.product(for: expansion.productId) else { return }
         purchasingId = expansion.productId
+        #if DEBUG
+        await purchaseManager.debugMockPurchase(productId: expansion.productId)
+        #else
+        guard let product = purchaseManager.product(for: expansion.productId) else {
+            purchasingId = nil; return
+        }
         await purchaseManager.purchase(product)
+        #endif
         purchasingId = nil
 
         if let error = purchaseManager.purchaseError {
