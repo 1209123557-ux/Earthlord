@@ -30,9 +30,8 @@ final class PurchaseManager: ObservableObject {
         "com.earthlord.supply.explorer",
         "com.earthlord.supply.lord",
         "com.earthlord.supply.overlord",
-        "com.earthlord.bag.small",
-        "com.earthlord.bag.medium",
-        "com.earthlord.bag.large",
+        "com.earthlord.sub.monthly",
+        "com.earthlord.sub.yearly",
     ]
 
     private var transactionListenerTask: Task<Void, Never>?
@@ -144,9 +143,10 @@ final class PurchaseManager: ObservableObject {
                 pack: pack,
                 transactionId: transactionId
             )
-        } else if let expansion = BagExpansionCatalog.find(productId) {
-            // 背包扩容：直接调用 RPC 增加容量
-            await applyBagExpansion(userId: userId, expansion: expansion)
+        } else if productId == SubscriptionTier.monthly.rawValue ||
+                  productId == SubscriptionTier.yearly.rawValue {
+            // 订阅：刷新订阅状态
+            await SubscriptionManager.shared.refreshStatus()
         }
     }
 
@@ -176,23 +176,6 @@ final class PurchaseManager: ObservableObject {
             await MailboxManager.shared.fetchMailbox()
         } catch {
             logger.error("[Purchase] 邮箱发货失败: \(error.localizedDescription)")
-        }
-    }
-
-    // MARK: - Apply Bag Expansion
-
-    private func applyBagExpansion(userId: UUID, expansion: BagExpansionProduct) async {
-        let params: [String: AnyJSON] = [
-            "p_user_id": .string(userId.uuidString.lowercased()),
-            "p_extra":   .integer(expansion.extraCapacity),
-        ]
-        do {
-            try await supabase.rpc("add_bag_expansion", params: params).execute()
-            logger.info("[Purchase] 背包扩容成功: +\(expansion.extraCapacity)")
-            // 通知 InventoryManager 刷新容量
-            await InventoryManager.shared.fetchExpansionCapacity()
-        } catch {
-            logger.error("[Purchase] 背包扩容失败: \(error.localizedDescription)")
         }
     }
 

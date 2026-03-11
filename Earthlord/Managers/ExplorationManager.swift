@@ -9,6 +9,7 @@
 import Foundation
 import CoreLocation
 import Combine
+import Supabase
 import OSLog
 
 final class ExplorationManager: NSObject, ObservableObject {
@@ -21,6 +22,7 @@ final class ExplorationManager: NSObject, ObservableObject {
     @Published private(set) var locationCount    = 0
     @Published private(set) var currentSpeedKmh  = 0.0
     @Published private(set) var explorationFailed = false
+    @Published private(set) var todayExplorationCount: Int = 0
 
     // MARK: - POI 相关 Published
 
@@ -57,6 +59,36 @@ final class ExplorationManager: NSObject, ObservableObject {
         clManager.pausesLocationUpdatesAutomatically = false
     }
 
+    // MARK: - 每日探索次数
+
+    func fetchTodayExplorationCount() async {
+        guard let userId = AuthManager.shared.currentUser?.id else { return }
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: Date())
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let startStr = formatter.string(from: startOfDay)
+
+        do {
+            struct SessionRow: Decodable { let id: String }
+            let rows: [SessionRow] = try await supabase
+                .from("exploration_sessions")
+                .select("id")
+                .eq("user_id", value: userId.uuidString.lowercased())
+                .gte("started_at", value: startStr)
+                .execute()
+                .value
+            await MainActor.run { self.todayExplorationCount = rows.count }
+        } catch {
+            // 查询失败时不阻断探索
+        }
+    }
+
+    var hasReachedDailyExplorationLimit: Bool {
+        let limit = SubscriptionManager.shared.tier.maxDailyExplorations
+        return todayExplorationCount >= limit
+    }
+
     // MARK: - 开始 / 结束
 
     func startExploration(from location: CLLocationCoordinate2D? = nil) {
@@ -72,7 +104,8 @@ final class ExplorationManager: NSObject, ObservableObject {
         startTime         = Date()
         isExploring       = true
 
-        logger.info("[ExploreManager] 开始探索")
+        todayExplorationCount += 1
+        logger.info("[ExploreManager] 开始探索（今日第 \(self.todayExplorationCount) 次）")
         expLogger.log("🚀 探索开始")
 
         if clManager.authorizationStatus == .notDetermined {

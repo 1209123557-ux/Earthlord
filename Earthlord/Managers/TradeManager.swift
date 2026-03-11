@@ -26,6 +26,26 @@ final class TradeManager: ObservableObject {
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
+    // MARK: - 检查挂单上限
+
+    func canCreateListing() async -> Bool {
+        guard let userId = AuthManager.shared.currentUser?.id else { return false }
+        let limit = SubscriptionManager.shared.tier.maxTradeListings
+        do {
+            struct OfferRow: Decodable { let id: String }
+            let rows: [OfferRow] = try await supabase
+                .from("trade_offers")
+                .select("id")
+                .eq("owner_id", value: userId.uuidString.lowercased())
+                .eq("status", value: "active")
+                .execute()
+                .value
+            return rows.count < limit
+        } catch {
+            return true // 查询失败时不阻断用户
+        }
+    }
+
     // MARK: - 创建挂单
 
     /// 发布一条交易挂单，同时从库存扣除 offeringItems。

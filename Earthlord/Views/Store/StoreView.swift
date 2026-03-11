@@ -2,7 +2,7 @@
 //  StoreView.swift
 //  Earthlord
 //
-//  商城主页：物资包 + 背包扩容包
+//  商城主页：物资包 Tab + 订阅 Tab
 //
 
 import SwiftUI
@@ -13,6 +13,7 @@ struct StoreView: View {
     @StateObject private var purchaseManager = PurchaseManager.shared
     @StateObject private var mailboxManager = MailboxManager.shared
     @EnvironmentObject private var inventoryManager: InventoryManager
+    @State private var storeTab = 0
     @State private var purchasingId: String? = nil
     @State private var showSuccessAlert = false
     @State private var showErrorAlert = false
@@ -26,40 +27,23 @@ struct StoreView: View {
             if purchaseManager.isLoading {
                 loadingView
             } else {
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // ── 物资包区域 ──
-                        sectionHeader(title: "末日物资包", icon: "shippingbox.fill")
-
-                        ForEach(PackCatalog.all, id: \.productId) { pack in
-                            PackProductCard(
-                                pack: pack,
-                                product: purchaseManager.product(for: pack.productId),
-                                isPurchasing: purchasingId == pack.productId,
-                                onBuy: { Task { await buyPack(pack) } }
-                            )
-                            .padding(.horizontal, 16)
-                        }
-
-                        // ── 背包扩容区域 ──
-                        sectionHeader(title: "背包扩容", icon: "bag.badge.plus")
-
-                        ForEach(BagExpansionCatalog.all, id: \.productId) { exp in
-                            BagExpansionCard(
-                                expansion: exp,
-                                product: purchaseManager.product(for: exp.productId),
-                                isPurchasing: purchasingId == exp.productId,
-                                onBuy: { Task { await buyExpansion(exp) } }
-                            )
-                            .padding(.horizontal, 16)
-                        }
-
-                        // 当前背包容量提示
-                        capacityHint
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 24)
+                VStack(spacing: 0) {
+                    // ── 顶部 Tab Picker ──
+                    Picker("商城分类", selection: $storeTab) {
+                        Text("物资包").tag(0)
+                        Text("订阅").tag(1)
                     }
-                    .padding(.top, 12)
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+
+                    if storeTab == 0 {
+                        packTab
+                    } else {
+                        SubscriptionView(purchasingId: $purchasingId, onPurchase: { sub in
+                            Task { await buySubscription(sub) }
+                        })
+                    }
                 }
             }
         }
@@ -102,6 +86,29 @@ struct StoreView: View {
         }
     }
 
+    // MARK: - Pack Tab
+
+    private var packTab: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                sectionHeader(title: "末日物资包", icon: "shippingbox.fill")
+
+                ForEach(PackCatalog.all, id: \.productId) { pack in
+                    PackProductCard(
+                        pack: pack,
+                        product: purchaseManager.product(for: pack.productId),
+                        isPurchasing: purchasingId == pack.productId,
+                        onBuy: { Task { await buyPack(pack) } }
+                    )
+                    .padding(.horizontal, 16)
+                }
+
+                Spacer(minLength: 24)
+            }
+            .padding(.top, 12)
+        }
+    }
+
     // MARK: - Section Header
 
     private func sectionHeader(title: String, icon: String) -> some View {
@@ -116,21 +123,6 @@ struct StoreView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 4)
-    }
-
-    // MARK: - Capacity Hint
-
-    private var capacityHint: some View {
-        ELCard(padding: EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14)) {
-            HStack(spacing: 8) {
-                Image(systemName: "info.circle.fill")
-                    .foregroundColor(ApocalypseTheme.info)
-                    .font(.system(size: 14))
-                Text("当前背包容量：\(inventoryManager.totalCount) / \(inventoryManager.maxCapacity)（基础100 + 扩容\(inventoryManager.expansionCapacity)）")
-                    .font(.system(size: 12))
-                    .foregroundColor(ApocalypseTheme.textSecondary)
-            }
-        }
     }
 
     // MARK: - Loading View
@@ -164,9 +156,9 @@ struct StoreView: View {
         }
     }
 
-    private func buyExpansion(_ expansion: BagExpansionProduct) async {
-        guard let product = purchaseManager.product(for: expansion.productId) else { return }
-        purchasingId = expansion.productId
+    private func buySubscription(_ sub: SubscriptionProduct) async {
+        guard let product = purchaseManager.product(for: sub.id) else { return }
+        purchasingId = sub.id
         await purchaseManager.purchase(product)
         purchasingId = nil
 
@@ -174,7 +166,7 @@ struct StoreView: View {
             alertMessage = error
             showErrorAlert = true
         } else {
-            alertMessage = "背包已扩容 +\(expansion.extraCapacity) 格，立即生效"
+            alertMessage = "订阅成功！会员权益已生效"
             showSuccessAlert = true
         }
     }

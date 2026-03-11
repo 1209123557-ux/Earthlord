@@ -136,45 +136,96 @@ enum PackCatalog {
     }
 }
 
-// MARK: - BagExpansion
+// MARK: - SubscriptionTier
 
-/// 背包扩容商品定义
-struct BagExpansionProduct {
-    let productId: String
-    let displayName: String
-    let price: String
-    let extraCapacity: Int
-    let description: String
+/// 订阅档位
+enum SubscriptionTier: String {
+    case none
+    case monthly = "com.earthlord.sub.monthly"
+    case yearly  = "com.earthlord.sub.yearly"
+
+    var maxDailyExplorations: Int {
+        switch self {
+        case .none:    return 5
+        case .monthly: return 10
+        case .yearly:  return 999
+        }
+    }
+
+    var maxBuildings: Int {
+        switch self {
+        case .none:    return 3
+        case .monthly: return 10
+        case .yearly:  return 20
+        }
+    }
+
+    var maxTradeListings: Int {
+        switch self {
+        case .none:    return 3
+        case .monthly: return 10
+        case .yearly:  return 20
+        }
+    }
+
+    var backpackBonus: Int {
+        switch self {
+        case .none:    return 0
+        case .monthly: return 100
+        case .yearly:  return 200
+        }
+    }
+
+    var badgeText: String? {
+        switch self {
+        case .none:    return nil
+        case .monthly: return "🥈"
+        case .yearly:  return "👑"
+        }
+    }
+
+    var tierName: String {
+        switch self {
+        case .none:    return "免费玩家"
+        case .monthly: return "银色领主"
+        case .yearly:  return "金色领主"
+        }
+    }
 }
 
-enum BagExpansionCatalog {
-    static let all: [BagExpansionProduct] = [small, medium, large]
+// MARK: - SubscriptionProduct
 
-    static let small = BagExpansionProduct(
-        productId: "com.earthlord.bag.small",
-        displayName: "背包扩容·小",
-        price: "¥6",
-        extraCapacity: 50,
-        description: "永久增加 50 格背包空间"
-    )
-    static let medium = BagExpansionProduct(
-        productId: "com.earthlord.bag.medium",
-        displayName: "背包扩容·中",
+struct SubscriptionProduct {
+    let id: String
+    let name: String
+    let price: String
+    let period: String
+    let saveLabel: String?
+    let benefits: [String]
+}
+
+// MARK: - SubscriptionCatalog
+
+enum SubscriptionCatalog {
+    static let monthly = SubscriptionProduct(
+        id: "com.earthlord.sub.monthly",
+        name: "月度领主令",
         price: "¥18",
-        extraCapacity: 150,
-        description: "永久增加 150 格背包空间"
-    )
-    static let large = BagExpansionProduct(
-        productId: "com.earthlord.bag.large",
-        displayName: "背包扩容·大",
-        price: "¥45",
-        extraCapacity: 400,
-        description: "永久增加 400 格背包空间"
+        period: "月",
+        saveLabel: nil,
+        benefits: ["每日探索10次", "建造上限10个", "挂单上限10条", "背包+100格", "每日基础补给", "🥈 银色领主徽章"]
     )
 
-    static func find(_ productId: String) -> BagExpansionProduct? {
-        all.first { $0.productId == productId }
-    }
+    static let yearly = SubscriptionProduct(
+        id: "com.earthlord.sub.yearly",
+        name: "年度领主令",
+        price: "¥128",
+        period: "年",
+        saveLabel: "省¥88",
+        benefits: ["每日探索无限次", "建造上限20个", "挂单上限20条", "背包+200格", "每日豪华补给", "👑 金色领主徽章"]
+    )
+
+    static let all: [SubscriptionProduct] = [monthly, yearly]
 }
 
 // MARK: - MailboxItem（邮箱行模型）

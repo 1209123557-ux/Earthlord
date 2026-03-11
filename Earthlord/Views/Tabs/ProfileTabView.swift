@@ -11,6 +11,7 @@ import Supabase
 /// 个人页面：显示用户信息 + 退出登录
 struct ProfileTabView: View {
     @ObservedObject private var authManager = AuthManager.shared
+    @ObservedObject private var subscriptionManager = SubscriptionManager.shared
 
     /// 是否显示退出确认弹窗
     @State private var showLogoutAlert = false
@@ -87,9 +88,15 @@ struct ProfileTabView: View {
 
             // 用户名 / 邮箱 / ID
             VStack(spacing: 4) {
-                Text(displayName)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(ApocalypseTheme.textPrimary)
+                HStack(spacing: 6) {
+                    Text(displayName)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(ApocalypseTheme.textPrimary)
+                    if let badge = subscriptionManager.tier.badgeText {
+                        Text(badge)
+                            .font(.system(size: 18))
+                    }
+                }
 
                 Text(userEmail)
                     .font(.system(size: 14))

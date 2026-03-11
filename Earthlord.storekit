@@ -63,55 +63,53 @@
       "productID" : "com.earthlord.supply.overlord",
       "referenceName" : "末日霸主包",
       "type" : "Consumable"
-    },
-    {
-      "displayPrice" : "6.00",
-      "familySharable" : false,
-      "internalID" : "com.earthlord.bag.small",
-      "localizations" : [
-        {
-          "description" : "背包扩容·小：永久增加50格背包空间",
-          "displayName" : "背包扩容·小",
-          "locale" : "zh_CN"
-        }
-      ],
-      "productID" : "com.earthlord.bag.small",
-      "referenceName" : "背包扩容小",
-      "type" : "Consumable"
-    },
-    {
-      "displayPrice" : "18.00",
-      "familySharable" : false,
-      "internalID" : "com.earthlord.bag.medium",
-      "localizations" : [
-        {
-          "description" : "背包扩容·中：永久增加150格背包空间",
-          "displayName" : "背包扩容·中",
-          "locale" : "zh_CN"
-        }
-      ],
-      "productID" : "com.earthlord.bag.medium",
-      "referenceName" : "背包扩容中",
-      "type" : "Consumable"
-    },
-    {
-      "displayPrice" : "45.00",
-      "familySharable" : false,
-      "internalID" : "com.earthlord.bag.large",
-      "localizations" : [
-        {
-          "description" : "背包扩容·大：永久增加400格背包空间",
-          "displayName" : "背包扩容·大",
-          "locale" : "zh_CN"
-        }
-      ],
-      "productID" : "com.earthlord.bag.large",
-      "referenceName" : "背包扩容大",
-      "type" : "Consumable"
     }
   ],
   "autoRenewableSubscriptions" : [
+    {
+      "adHocOffers" : [
 
+      ],
+      "displayPrice" : "18.00",
+      "familySharable" : false,
+      "groupNumber" : 1,
+      "internalID" : "com.earthlord.sub.monthly",
+      "introductoryOffer" : null,
+      "localizations" : [
+        {
+          "description" : "每月自动续费，探索10次/日、建造10个、挂单10条、背包+100格、每日基础补给",
+          "displayName" : "月度领主令",
+          "locale" : "zh_CN"
+        }
+      ],
+      "productID" : "com.earthlord.sub.monthly",
+      "referenceName" : "月度领主令",
+      "subscriptionGroupID" : "earthlord_premium",
+      "subscriptionPeriod" : "P1M",
+      "type" : "RecurringSubscription"
+    },
+    {
+      "adHocOffers" : [
+
+      ],
+      "displayPrice" : "128.00",
+      "familySharable" : false,
+      "groupNumber" : 1,
+      "internalID" : "com.earthlord.sub.yearly",
+      "introductoryOffer" : null,
+      "localizations" : [
+        {
+          "description" : "每年自动续费，探索无限次、建造20个、挂单20条、背包+200格、每日豪华补给",
+          "displayName" : "年度领主令",
+          "locale" : "zh_CN"
+        }
+      ],
+      "productID" : "com.earthlord.sub.yearly",
+      "referenceName" : "年度领主令",
+      "subscriptionGroupID" : "earthlord_premium",
+      "subscriptionPeriod" : "P1Y",
+      "type" : "RecurringSubscription"
+    }
   ],
   "nonRenewingSubscriptions" : [
 

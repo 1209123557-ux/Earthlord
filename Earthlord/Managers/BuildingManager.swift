@@ -26,8 +26,10 @@ final class BuildingManager: ObservableObject {
     @Published var errorMessage: String?
     @Published private(set) var buildingUpdateVersion: Int = 0
 
-    /// 单个领地最多建造数量上限
-    private let maxBuildingsPerTerritory = 10
+    /// 当前玩家最多建造数量上限（依据订阅档位）
+    private var maxBuildingsPerTerritory: Int {
+        SubscriptionManager.shared.tier.maxBuildings
+    }
 
     // MARK: - 加载模板（从 Bundle JSON）
 
