@@ -3,26 +3,35 @@
 //  Earthlord
 //
 //  附近兴趣点列表页面
-//  数据来源：MockExplorationData（假数据，待后端接入后替换）
+//  数据来源：POISearchManager（MapKit 真实搜索）
 //
 
 import SwiftUI
+import CoreLocation
 
-// MARK: - POI 类型样式（图标 + 颜色）
+// MARK: - 类型颜色映射
 
-private struct POITypeStyle {
-    let color: Color
-    let icon: String
+private func typeColor(for type: GamePOIType) -> Color {
+    switch type {
+    case .hospital:   return .red
+    case .pharmacy:   return .purple
+    case .store:      return .green
+    case .gasStation: return .orange
+    case .restaurant: return Color(red: 0.9, green: 0.6, blue: 0.2)
+    case .cafe:       return Color(red: 0.6, green: 0.4, blue: 0.2)
+    case .unknown:    return ApocalypseTheme.primary
+    }
 }
 
-private func typeStyle(for type: String) -> POITypeStyle {
-    switch type {
-    case "医院":   return POITypeStyle(color: .red,    icon: "cross.case.fill")
-    case "超市":   return POITypeStyle(color: .green,  icon: "cart.fill")
-    case "工厂":   return POITypeStyle(color: .gray,   icon: "building.2.fill")
-    case "药店":   return POITypeStyle(color: .purple, icon: "pills.fill")
-    case "加油站": return POITypeStyle(color: .orange, icon: "fuelpump.fill")
-    default:       return POITypeStyle(color: ApocalypseTheme.primary, icon: "mappin.fill")
+private func categoryColor(for category: String) -> Color {
+    switch category {
+    case "医院":   return .red
+    case "药店":   return .purple
+    case "商店":   return .green
+    case "加油站": return .orange
+    case "餐厅":   return Color(red: 0.9, green: 0.6, blue: 0.2)
+    case "咖啡馆": return Color(red: 0.6, green: 0.4, blue: 0.2)
+    default:       return ApocalypseTheme.primary
     }
 }
 
@@ -31,28 +40,21 @@ private func typeStyle(for type: String) -> POITypeStyle {
 struct POIListView: View {
 
     // MARK: - 状态
+    @ObservedObject private var locationManager = LocationManager.shared
+    @State private var searchResults: [GamePOI] = []
+    @State private var hasSearched    = false
+    @State private var searchError: String? = nil
     @State private var isSearching    = false
     @State private var selectedCategory = "全部"
-    @State private var listVisible    = false   // 控制列表错开淡入
-    @State private var searchScaled   = false   // 控制搜索按钮缩放
+    @State private var listVisible    = false
+    @State private var searchScaled   = false
 
-    // MARK: - 假数据
-    /// 模拟 GPS 坐标（真实接入后改为 locationManager.userLocation）
-    private let mockLatitude  = 22.54
-    private let mockLongitude = 114.06
+    // MARK: - 配置
+    private let categories = ["全部", "医院", "药店", "商店", "加油站", "餐厅", "咖啡馆"]
 
-    /// 筛选分类列表
-    private let categories = ["全部", "医院", "超市", "工厂", "药店", "加油站"]
-
-    /// 已发现的 POI 数量（状态不为 undiscovered）
-    private var discoveredCount: Int {
-        MockPOIData.list.filter { $0.status != .undiscovered }.count
-    }
-
-    /// 当前分类筛选后的 POI 列表
-    private var filteredPOIs: [POI] {
-        guard selectedCategory != "全部" else { return MockPOIData.list }
-        return MockPOIData.list.filter { $0.type == selectedCategory }
+    private var filteredPOIs: [GamePOI] {
+        guard selectedCategory != "全部" else { return searchResults }
+        return searchResults.filter { $0.poiType.displayName == selectedCategory }
     }
 
     // MARK: - Body
@@ -77,24 +79,29 @@ struct POIListView: View {
     private var statusBar: some View {
         ELCard(padding: EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)) {
             HStack {
-                // GPS 坐标
                 HStack(spacing: 6) {
                     Image(systemName: "location.fill")
                         .font(.system(size: 13))
                         .foregroundColor(ApocalypseTheme.info)
-                    Text(String(format: "%.2f°N  %.2f°E", mockLatitude, mockLongitude))
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(ApocalypseTheme.textSecondary)
+                    if let coord = locationManager.userLocation {
+                        Text(String(format: "%.4f°N  %.4f°E",
+                                    coord.latitude, coord.longitude))
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(ApocalypseTheme.textSecondary)
+                    } else {
+                        Text("定位中...")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(ApocalypseTheme.textMuted)
+                    }
                 }
 
                 Spacer()
 
-                // 发现数量
                 HStack(spacing: 5) {
                     Image(systemName: "eye.fill")
                         .font(.system(size: 13))
                         .foregroundColor(ApocalypseTheme.primary)
-                    Text("附近发现 \(discoveredCount) 个地点")
+                    Text("附近发现 \(searchResults.count) 个地点")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(ApocalypseTheme.textPrimary)
                 }
@@ -106,7 +113,6 @@ struct POIListView: View {
     // MARK: - 搜索按钮
     private var searchButton: some View {
         Button(action: {
-            // 轻微缩放反馈
             withAnimation(.spring(response: 0.2, dampingFraction: 0.5)) { searchScaled = true }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.13) {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) { searchScaled = false }
@@ -157,10 +163,7 @@ struct POIListView: View {
 
     private func filterChip(_ category: String) -> some View {
         let isSelected = selectedCategory == category
-        // 分类对应颜色（全部用主题橙色）
-        let accentColor: Color = category == "全部"
-            ? ApocalypseTheme.primary
-            : typeStyle(for: category).color
+        let accentColor = categoryColor(for: category)
 
         return Button(action: { selectedCategory = category }) {
             Text(category)
@@ -182,15 +185,18 @@ struct POIListView: View {
     private var poiScrollList: some View {
         ScrollView {
             LazyVStack(spacing: 10) {
-                if filteredPOIs.isEmpty {
+                if let error = searchError {
+                    stateView(icon: "exclamationmark.triangle",
+                              title: "搜索失败",
+                              subtitle: error)
+                } else if filteredPOIs.isEmpty {
                     emptyState
                 } else {
                     ForEach(Array(filteredPOIs.enumerated()), id: \.element.id) { idx, poi in
                         NavigationLink(destination: POIDetailView(poi: poi)) {
-                            POICard(poi: poi)
+                            GamePOICard(poi: poi)
                         }
                         .buttonStyle(.plain)
-                        // 错开淡入：每张卡延迟 0.07s，最多延迟到第 5 张
                         .opacity(listVisible ? 1 : 0)
                         .offset(y: listVisible ? 0 : 12)
                         .animation(
@@ -221,20 +227,14 @@ struct POIListView: View {
 
     @ViewBuilder
     private var emptyState: some View {
-        if selectedCategory == "全部" {
-            // 全局无 POI 数据（尚未搜索或周围真的没有）
-            stateView(
-                icon: "map",
-                title: "附近暂无兴趣点",
-                subtitle: "点击搜索按钮发现周围的废墟"
-            )
+        if !hasSearched {
+            stateView(icon: "map",
+                      title: "还没有搜索记录",
+                      subtitle: "点击搜索按钮发现周围的地点")
         } else {
-            // 当前分类筛选后没有结果
-            stateView(
-                icon: "mappin.slash",
-                title: "没有找到该类型的地点",
-                subtitle: "换个分类试试看"
-            )
+            stateView(icon: "mappin.slash",
+                      title: "附近暂无匹配地点",
+                      subtitle: "试试扩大范围或切换其他分类")
         }
     }
 
@@ -257,19 +257,33 @@ struct POIListView: View {
         .padding(.horizontal, 40)
     }
 
-    // MARK: - 搜索逻辑（1.5 秒模拟）
+    // MARK: - 搜索逻辑
     private func triggerSearch() {
+        guard let coord = locationManager.userLocation else {
+            searchError = "无法获取位置，请检查定位权限"
+            return
+        }
         isSearching = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            isSearching = false
+        searchError = nil
+        Task {
+            let results = await POISearchManager.searchNearbyPOIs(center: coord, limit: 20)
+            await MainActor.run {
+                searchResults = results
+                hasSearched = true
+                isSearching = false
+                listVisible = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    listVisible = true
+                }
+            }
         }
     }
 }
 
-// MARK: - POICard（单条 POI 卡片）
+// MARK: - GamePOICard（单条 POI 卡片）
 
-private struct POICard: View {
-    let poi: POI
+private struct GamePOICard: View {
+    let poi: GamePOI
 
     var body: some View {
         ELCard(padding: EdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14)) {
@@ -277,90 +291,43 @@ private struct POICard: View {
                 typeIcon
                 infoColumn
                 Spacer()
-                rightBadge
+                lootBadge
             }
         }
     }
 
-    // 左侧类型图标
+    private var color: Color { typeColor(for: poi.poiType) }
+
     private var typeIcon: some View {
-        let style = typeStyle(for: poi.type)
-        return ZStack {
+        ZStack {
             Circle()
-                .fill(style.color.opacity(poi.status == .undiscovered ? 0.12 : 0.18))
+                .fill(color.opacity(0.18))
                 .frame(width: 46, height: 46)
-            Image(systemName: poi.status == .undiscovered ? "questionmark" : style.icon)
+            Image(systemName: poi.poiType.systemImage)
                 .font(.system(size: 18))
-                .foregroundColor(poi.status == .undiscovered ? ApocalypseTheme.textMuted : style.color)
+                .foregroundColor(color)
         }
     }
 
-    // 中间信息列
     private var infoColumn: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // 名称
-            Text(poi.status == .undiscovered ? "???" : poi.name)
+            Text(poi.name)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundColor(poi.status == .undiscovered
-                    ? ApocalypseTheme.textMuted
-                    : ApocalypseTheme.textPrimary)
-
-            // 类型 + 发现状态
-            HStack(spacing: 6) {
-                Text(poi.status == .undiscovered ? "未知地点" : poi.type)
-                    .font(.caption)
-                    .foregroundColor(ApocalypseTheme.textSecondary)
-
-                if poi.status != .undiscovered {
-                    Text("·")
-                        .foregroundColor(ApocalypseTheme.textMuted)
-                    statusLabel
-                }
-            }
+                .foregroundColor(ApocalypseTheme.textPrimary)
+            Text(poi.poiType.displayName)
+                .font(.caption)
+                .foregroundColor(ApocalypseTheme.textSecondary)
         }
     }
 
-    // 发现状态标签
-    private var statusLabel: some View {
-        switch poi.status {
-        case .undiscovered:
-            return Text("").font(.caption).foregroundColor(.clear)
-        case .discovered:
-            return Text("已发现")
-                .font(.caption)
-                .foregroundColor(ApocalypseTheme.success)
-        case .looted:
-            return Text("已搜空")
-                .font(.caption)
-                .foregroundColor(ApocalypseTheme.textMuted)
-        }
-    }
-
-    // 右侧物资/箭头徽章
-    @ViewBuilder
-    private var rightBadge: some View {
-        if poi.status == .undiscovered {
-            Image(systemName: "lock.fill")
-                .font(.system(size: 14))
-                .foregroundColor(ApocalypseTheme.textMuted)
-        } else if poi.hasLoot {
-            VStack(spacing: 2) {
-                Image(systemName: "shippingbox.fill")
-                    .font(.system(size: 13))
-                    .foregroundColor(ApocalypseTheme.warning)
-                Text("有物资")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(ApocalypseTheme.warning)
-            }
-        } else {
-            VStack(spacing: 2) {
-                Image(systemName: "shippingbox")
-                    .font(.system(size: 13))
-                    .foregroundColor(ApocalypseTheme.textMuted)
-                Text("已搜空")
-                    .font(.system(size: 10))
-                    .foregroundColor(ApocalypseTheme.textMuted)
-            }
+    private var lootBadge: some View {
+        VStack(spacing: 2) {
+            Image(systemName: poi.isLooted ? "shippingbox" : "shippingbox.fill")
+                .font(.system(size: 13))
+                .foregroundColor(poi.isLooted ? ApocalypseTheme.textMuted : ApocalypseTheme.warning)
+            Text(poi.isLooted ? "已搜空" : "未搜刮")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(poi.isLooted ? ApocalypseTheme.textMuted : ApocalypseTheme.warning)
         }
     }
 }
