@@ -265,6 +265,57 @@ final class BuildingManager: ObservableObject {
         Dictionary(uniqueKeysWithValues: buildingTemplates.map { ($0.id, $0) })
     }
 
+    // MARK: - 产出计算
+
+    /// 计算建筑当前待收取数量（纯客户端离线计算）
+    func pendingCount(building: PlayerBuilding, template: BuildingTemplate) -> Int {
+        guard building.status == .active,
+              let perHour = template.productionPerHour,
+              let maxH = template.maxAccumulationHours else { return 0 }
+        let since = building.lastCollectedAt
+                    ?? building.buildCompletedAt
+                    ?? building.buildStartedAt
+        let hours = min(Date().timeIntervalSince(since) / 3600.0, Double(maxH))
+        return Int(hours * Double(perHour) * Double(building.level))
+    }
+
+    // MARK: - 收取产出
+
+    func collectProduction(buildingId: String) async throws {
+        guard let building = playerBuildings.first(where: { $0.id == buildingId }),
+              let template = templateDict[building.templateId],
+              let itemId = template.productionItemId else { return }
+        let count = pendingCount(building: building, template: template)
+        guard count > 0 else { return }
+
+        // 1. 写背包
+        try await InventoryManager.shared.addItems([(itemId: itemId, quantity: count)], reason: "领地产出")
+
+        // 2. 更新 last_collected_at
+        struct Patch: Encodable { let last_collected_at: String }
+        let fmt = ISO8601DateFormatter()
+        fmt.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        try await supabase
+            .from("player_buildings")
+            .update(Patch(last_collected_at: fmt.string(from: Date())))
+            .eq("id", value: buildingId)
+            .execute()
+
+        // 3. 刷新本地
+        if let idx = playerBuildings.firstIndex(where: { $0.id == buildingId }) {
+            let updated: PlayerBuilding = try await supabase
+                .from("player_buildings")
+                .select()
+                .eq("id", value: buildingId)
+                .single()
+                .execute()
+                .value
+            playerBuildings[idx] = updated
+            buildingUpdateVersion += 1
+        }
+        logger.info("[Building] ✅ 收取产出 \(buildingId)：\(itemId) x\(count)")
+    }
+
     // MARK: - 拉取领地建筑列表
 
     func fetchPlayerBuildings(territoryId: String) async {

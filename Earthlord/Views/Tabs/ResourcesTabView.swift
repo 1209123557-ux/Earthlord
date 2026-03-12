@@ -67,6 +67,8 @@ struct ResourcesTabView: View {
             BackpackView()
         case 2:
             StoreView()
+        case 3:
+            TerritoryProductionView()
         case 4:
             TradeMainView()
                 .environmentObject(inventoryManager)

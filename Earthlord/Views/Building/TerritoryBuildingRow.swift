@@ -61,6 +61,14 @@ struct TerritoryBuildingRow: View {
 
             Spacer()
 
+            // 待收取徽章（生产建筑 active 时显示）
+            let pending = BuildingManager.shared.pendingCount(building: building, template: template)
+            if pending > 0 {
+                Text("待收取 \(pending)")
+                    .font(.caption)
+                    .foregroundColor(ApocalypseTheme.warning)
+            }
+
             // 操作菜单（仅 active 状态）
             if building.status == .active {
                 Menu {

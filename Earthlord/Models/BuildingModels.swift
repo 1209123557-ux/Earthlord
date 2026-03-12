@@ -77,12 +77,18 @@ struct BuildingTemplate: Codable, Identifiable {
     let maxLevel: Int
     let buildTimeSeconds: Int
     let requiredResources: [String: Int]
+    let productionItemId: String?
+    let productionPerHour: Int?
+    let maxAccumulationHours: Int?
 
     enum CodingKeys: String, CodingKey {
         case id, name, description, category, level
-        case maxLevel          = "max_level"
-        case buildTimeSeconds  = "build_time_seconds"
-        case requiredResources = "required_resources"
+        case maxLevel              = "max_level"
+        case buildTimeSeconds      = "build_time_seconds"
+        case requiredResources     = "required_resources"
+        case productionItemId      = "production_item_id"
+        case productionPerHour     = "production_per_hour"
+        case maxAccumulationHours  = "max_accumulation_hours"
     }
 }
 
@@ -102,20 +108,22 @@ struct PlayerBuilding: Codable, Identifiable {
     let buildCompletedAt: Date?
     let createdAt: Date
     var updatedAt: Date
+    var lastCollectedAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case id
-        case userId          = "user_id"
-        case territoryId     = "territory_id"
-        case templateId      = "template_id"
-        case buildingName    = "building_name"
+        case userId           = "user_id"
+        case territoryId      = "territory_id"
+        case templateId       = "template_id"
+        case buildingName     = "building_name"
         case status, level
-        case locationLat     = "location_lat"
-        case locationLon     = "location_lon"
-        case buildStartedAt  = "build_started_at"
+        case locationLat      = "location_lat"
+        case locationLon      = "location_lon"
+        case buildStartedAt   = "build_started_at"
         case buildCompletedAt = "build_completed_at"
-        case createdAt       = "created_at"
-        case updatedAt       = "updated_at"
+        case createdAt        = "created_at"
+        case updatedAt        = "updated_at"
+        case lastCollectedAt  = "last_collected_at"
     }
 
     /// 建造是否已完成（基于 buildCompletedAt）

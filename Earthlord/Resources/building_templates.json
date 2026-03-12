@@ -49,7 +49,26 @@
     "required_resources": {
       "item_wood": 20,
       "item_rope": 5
-    }
+    },
+    "production_item_id": "item_biscuit",
+    "production_per_hour": 2,
+    "max_accumulation_hours": 8
+  },
+  {
+    "id": "water_collector",
+    "name": "集水器",
+    "description": "收集雨水和空气中的水分，持续产出饮用水。",
+    "category": "production",
+    "level": 1,
+    "max_level": 4,
+    "build_time_seconds": 60,
+    "required_resources": {
+      "item_wood": 20,
+      "item_rope": 5
+    },
+    "production_item_id": "item_water_bottle",
+    "production_per_hour": 2,
+    "max_accumulation_hours": 8
   },
   {
     "id": "solar_panel",
