@@ -79,11 +79,35 @@ final class InventoryManager: ObservableObject {
             throw InventoryError.notAuthenticated
         }
 
-        logger.info("[Inventory] 开始写入 \(list.count) 种物品，原因：\(reason)")
-        ExplorationLogger.shared.log("🎒 添加 \(list.count) 个物品到背包")
+        // 确保本地库存已加载（防止 totalCount 为 0 导致检查失效）
+        if items.isEmpty { await fetchInventory() }
+
+        // 容量检查：计算本次新增总件数，超出上限则截断
+        let incoming = list.reduce(0) { $0 + $1.quantity }
+        let available = maxCapacity - totalCount
+        guard available > 0 else {
+            throw InventoryError.capacityExceeded(max: maxCapacity)
+        }
+        // 若本次全部写入会超载，按比例截断每种物品数量
+        let actualList: [(itemId: String, quantity: Int)]
+        if incoming > available {
+            var remaining = available
+            actualList = list.compactMap { entry in
+                guard remaining > 0 else { return nil }
+                let qty = min(entry.quantity, remaining)
+                remaining -= qty
+                return (itemId: entry.itemId, quantity: qty)
+            }
+            logger.warning("[Inventory] 背包空间不足，写入量从 \(incoming) 截断为 \(available)")
+        } else {
+            actualList = list
+        }
+
+        logger.info("[Inventory] 开始写入 \(actualList.count) 种物品，原因：\(reason)")
+        ExplorationLogger.shared.log("🎒 添加 \(actualList.count) 个物品到背包")
 
         // 调用 upsert_inventory_item RPC：有则 +N，没有则新建，同时写流水日志
-        for entry in list {
+        for entry in actualList {
             let params: [String: AnyJSON] = [
                 "p_user_id":  .string(userId.uuidString.lowercased()),
                 "p_item_id":  .string(entry.itemId),
@@ -196,7 +220,13 @@ final class InventoryManager: ObservableObject {
 
     enum InventoryError: Error, LocalizedError {
         case notAuthenticated
-        var errorDescription: String? { "请先登录后再操作背包" }
+        case capacityExceeded(max: Int)
+        var errorDescription: String? {
+            switch self {
+            case .notAuthenticated:       return "请先登录后再操作背包"
+            case .capacityExceeded(let m): return "背包已满（上限 \(m) 件），请先清理背包"
+            }
+        }
     }
 }
 
